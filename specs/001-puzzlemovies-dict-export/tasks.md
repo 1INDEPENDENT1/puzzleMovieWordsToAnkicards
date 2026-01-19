@@ -3,7 +3,12 @@
 **Input**: Design documents from `/specs/001-puzzlemovies-dict-export/`
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: Not requested for this feature.
+**Tests**: 
+- Parser tests (unit):
+-  - WordParser parses 1 sample word row
+-  - PhraseParser parses 1 sample phrase row
+-  ExportFormatter test:
+- - no tabs/newlines break TSV.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
@@ -15,7 +20,7 @@
 
 ## Path Conventions
 
-- **Single project**: `src/`, `tests/` at repository root
+- **Single project**: `src/main/java/`, `src/test/java/` at repository root
 
 ---
 
@@ -25,7 +30,7 @@
 
 - [ ] T001 Create Maven project and basic metadata in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/pom.xml
 - [ ] T002 [P] Add dependency declarations (Jsoup, lingua-core) in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/pom.xml
-- [ ] T003 [P] Create source package structure under /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src
+- [ ] T003 [P] Create source package structure under /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java
 
 ---
 
@@ -35,12 +40,12 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 Create CLI option model in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/model/CliOptions.java
-- [ ] T005 Create token file persistence utility in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/util/TokenStore.java
-- [ ] T006 Create HTTP client provider and request helpers in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/http/HttpClientProvider.java
-- [ ] T007 Implement authentication flow (guest cookies + sign-in) in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/http/AuthService.java
-- [ ] T008 Implement dictionary page fetcher with pagination in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/http/DictionaryClient.java
-- [ ] T009 Create error types and fail-fast handler in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/util/AppException.java
+- [ ] T004 Create CLI option model in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/model/CliOptions.java
+- [ ] T005 Create token file persistence utility in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/util/TokenStore.java
+- [ ] T006 Create HTTP client provider and request helpers in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/http/HttpClientProvider.java
+- [ ] T007 Implement authentication flow (guest cookies + sign-in) in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/http/AuthService.java
+- [ ] T008 Implement dictionary page fetcher with pagination in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/http/DictionaryClient.java
+- [ ] T009 Create error types and fail-fast handler in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/util/AppException.java
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -54,14 +59,14 @@
 
 ### Implementation for User Story 1
 
-- [ ] T010 [P] [US1] Create word and phrase models in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/model/DictionaryWord.java
-- [ ] T011 [P] [US1] Create phrase model in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/model/DictionaryPhrase.java
-- [ ] T012 [P] [US1] Create export record model in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/model/ExportRecord.java
-- [ ] T013 [P] [US1] Implement word HTML parser in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/parser/WordParser.java
-- [ ] T014 [P] [US1] Implement phrase HTML parser in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/parser/PhraseParser.java
-- [ ] T015 [US1] Implement export formatter (TSV/CSV) in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/export/ExportFormatter.java
-- [ ] T016 [US1] Implement export writer (single combined file) in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/export/ExportWriter.java
-- [ ] T017 [US1] Wire CLI entry point for export flow in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/cli/Main.java
+- [ ] T010 [P] [US1] Create word and phrase models in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/model/DictionaryWord.java
+- [ ] T011 [P] [US1] Create phrase model in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/model/DictionaryPhrase.java
+- [ ] T012 [P] [US1] Create export record model in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/model/ExportRecord.java
+- [ ] T013 [P] [US1] Implement word HTML parser in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/parser/WordParser.java
+- [ ] T014 [P] [US1] Implement phrase HTML parser in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/parser/PhraseParser.java
+- [ ] T015 [US1] Implement export formatter (TSV/CSV) in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/export/ExportFormatter.java
+- [ ] T016 [US1] Implement export writer (single combined file) in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/export/ExportWriter.java
+- [ ] T017 [US1] Wire CLI entry point for export flow in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/cli/Main.java
 
 **Checkpoint**: User Story 1 export file generation works end-to-end
 
@@ -75,10 +80,10 @@
 
 ### Implementation for User Story 2
 
-- [ ] T018 [P] [US2] Implement phrase token normalization utilities in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/util/TextNormalizer.java
-- [ ] T019 [P] [US2] Implement word index builder in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/util/WordIndex.java
-- [ ] T020 [US2] Implement matching logic with two-example cap in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/util/Matcher.java
-- [ ] T021 [US2] Update export formatting to include examples in back HTML in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/export/ExportFormatter.java
+- [ ] T018 [P] [US2] Implement phrase token normalization utilities in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/util/TextNormalizer.java
+- [ ] T019 [P] [US2] Implement word index builder in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/util/WordIndex.java
+- [ ] T020 [US2] Implement matching logic with two-example cap in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/util/Matcher.java
+- [ ] T021 [US2] Update export formatting to include examples in back HTML in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/export/ExportFormatter.java
 
 **Checkpoint**: Word entries include up to two contextual examples when matches exist
 
@@ -92,9 +97,9 @@
 
 ### Implementation for User Story 3
 
-- [ ] T022 [US3] Implement de-duplication rules for words/phrases in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/util/Deduplicator.java
-- [ ] T023 [US3] Ensure phrases are always included as standalone records in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/export/ExportWriter.java
-- [ ] T024 [US3] Ensure missing translations are exported as blank fields in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/export/ExportFormatter.java
+- [ ] T022 [US3] Implement de-duplication rules for words/phrases in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/util/Deduplicator.java
+- [ ] T023 [US3] Ensure phrases are always included as standalone records in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/export/ExportWriter.java
+- [ ] T024 [US3] Ensure missing translations are exported as blank fields in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/export/ExportFormatter.java
 
 **Checkpoint**: Unmatched and missing-translation items are preserved in the export
 
@@ -105,8 +110,8 @@
 **Purpose**: Improvements that affect multiple user stories
 
 - [ ] T025 [P] Update usage docs in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/specs/001-puzzlemovies-dict-export/quickstart.md
-- [ ] T026 Add CLI help/usage output in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/cli/Main.java
-- [ ] T027 Add consistent error messages for auth/fetch/parse failures in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/util/AppException.java
+- [ ] T026 Add CLI help/usage output in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/cli/Main.java
+- [ ] T027 Add consistent error messages for auth/fetch/parse failures in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/util/AppException.java
 
 ---
 
@@ -139,8 +144,8 @@
 ## Parallel Example: User Story 2
 
 ```bash
-Task: "Implement phrase token normalization utilities in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/util/TextNormalizer.java"
-Task: "Implement word index builder in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/util/WordIndex.java"
+Task: "Implement phrase token normalization utilities in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/util/TextNormalizer.java"
+Task: "Implement word index builder in /mnt/c/Users/George/javaProjects/puzzleMovieWordsToAnkicards/src/main/java/util/WordIndex.java"
 ```
 
 ---
