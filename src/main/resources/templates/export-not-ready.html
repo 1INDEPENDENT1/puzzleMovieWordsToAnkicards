@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      th:replace="layout :: layout(~{::title}, ~{::section})">
+<head>
+    <title>Export Not Ready - PuzzleMovies Export</title>
+</head>
+<section class="card">
+    <h1>Export not ready</h1>
+    <p class="muted">This export is still running or failed. You can return to the progress page.</p>
+    <a class="button" th:href="@{'/exports/' + ${job.id}}">Back to progress</a>
+</section>
+</html>

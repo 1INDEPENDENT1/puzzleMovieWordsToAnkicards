@@ -1,0 +1,17 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5434/search_engine
+    username: search
+    password: ABZEabze2001
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+export:
+  output-dir: C:\Users\George\javaProjects\puzzleMovieWordsToAnkicards\exports
+  puzzle-movies:
+    base-url: https://puzzle-movies.com

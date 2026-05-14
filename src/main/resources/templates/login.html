@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      th:replace="layout :: layout(~{::title}, ~{::section})">
+<head>
+    <title>Login - PuzzleMovies Export</title>
+</head>
+<section class="card">
+    <h1>Sign in</h1>
+    <p class="muted">Use your puzzle-movies.com account to start an export.</p>
+    <form method="post" action="/login" class="form">
+        <label>
+            Email
+            <input type="email" name="email" required autocomplete="email">
+        </label>
+        <label>
+            Password
+            <input type="password" name="password" required autocomplete="current-password">
+        </label>
+        <div class="error" th:if="${error}" th:text="${error}"></div>
+        <button type="submit">Continue</button>
+    </form>
+</section>
+</html>

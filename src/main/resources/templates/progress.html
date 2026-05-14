@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      th:replace="layout :: layout(~{::title}, ~{::section})">
+<head>
+    <title>Export Progress - PuzzleMovies Export</title>
+</head>
+<section class="card" th:with="jobId=${job.id}">
+    <h1>Export progress</h1>
+    <p class="muted">Track export status and progress.</p>
+
+    <div class="progress-panel" data-job-id="" th:attr="data-job-id=${job.id}">
+        <div class="status-line">
+            <span>Status:</span>
+            <strong id="status-text" th:text="${job.status}"></strong>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill" th:style="|width: ${job.progressPercent}%|"></div>
+        </div>
+        <div class="progress-meta">
+            <span id="progress-percent" th:text="${job.progressPercent}"></span>% complete
+        </div>
+        <div class="error" id="error-text" th:if="${job.errorMessage}" th:text="${job.errorMessage}"></div>
+        <div class="download" id="download-link" style="display:none;">
+            <a th:href="@{'/exports/' + ${job.id} + '/download'}">Download TSV</a>
+        </div>
+    </div>
+
+    <script th:src="@{/js/progress.js}"></script>
+</section>
+</html>

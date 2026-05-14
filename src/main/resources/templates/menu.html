@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      th:replace="layout :: layout(~{::title}, ~{::section})">
+<head>
+    <title>Export Menu - PuzzleMovies Export</title>
+</head>
+<section class="card">
+    <h1>Export menu</h1>
+    <p class="muted">Choose what to export from your PuzzleMovies dictionary.</p>
+    <div class="menu-actions">
+        <form method="post" action="/exports">
+            <input type="hidden" name="type" value="WORDS">
+            <button type="submit">Parse words only</button>
+        </form>
+        <form method="post" action="/exports">
+            <input type="hidden" name="type" value="PHRASES">
+            <button type="submit">Parse phrases only</button>
+        </form>
+        <form method="post" action="/exports">
+            <input type="hidden" name="type" value="COMBINED">
+            <button type="submit">Parse everything</button>
+        </form>
+    </div>
+</section>
+</html>
