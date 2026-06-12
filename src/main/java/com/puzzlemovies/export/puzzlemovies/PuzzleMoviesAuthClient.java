@@ -12,7 +12,13 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Component
@@ -62,9 +68,10 @@ public class PuzzleMoviesAuthClient {
             return PuzzleMoviesAuthResult.failure("Authentication could not be completed. Please re-register in Puzzle-Movies and try again.");
         }
 
-        String cookieHeader = setCookie.stream()
-                .map(value -> value.split(";", 2)[0])
-                .collect(Collectors.joining("; "));
+        String cookieHeader = buildCookieHeader(setCookie, authResponse);
+        if (cookieHeader.isBlank()) {
+            return PuzzleMoviesAuthResult.failure("Authentication could not be completed. Please re-register in Puzzle-Movies and try again.");
+        }
         return PuzzleMoviesAuthResult.success(cookieHeader);
     }
 
@@ -81,6 +88,64 @@ public class PuzzleMoviesAuthClient {
             return "Authentication failed. Please try again.";
         }
         return message;
+    }
+
+    private String buildCookieHeader(List<String> setCookieHeaders, AuthResponse authResponse) {
+        Map<String, String> cookies = new LinkedHashMap<>();
+        for (String header : setCookieHeaders) {
+            addCookie(cookies, header);
+        }
+
+        if (authResponse.loggedInCookieName() != null && authResponse.loggedInCookie() != null) {
+            cookies.putIfAbsent(authResponse.loggedInCookieName().toLowerCase(Locale.ROOT),
+                    authResponse.loggedInCookieName() + "=" + authResponse.loggedInCookie());
+        }
+
+        return cookies.values().stream().collect(Collectors.joining("; "));
+    }
+
+    private void addCookie(Map<String, String> cookies, String setCookieHeader) {
+        if (setCookieHeader == null || setCookieHeader.isBlank() || isExpired(setCookieHeader)) {
+            return;
+        }
+
+        String[] parts = setCookieHeader.split(";", 2);
+        if (parts.length == 0) {
+            return;
+        }
+
+        String cookiePair = parts[0].trim();
+        int separator = cookiePair.indexOf('=');
+        if (separator <= 0 || separator == cookiePair.length() - 1) {
+            return;
+        }
+
+        String name = cookiePair.substring(0, separator).trim();
+        if (!name.isBlank()) {
+            cookies.put(name.toLowerCase(Locale.ROOT), cookiePair);
+        }
+    }
+
+    private boolean isExpired(String setCookieHeader) {
+        String[] parts = setCookieHeader.split(";");
+        for (int i = 1; i < parts.length; i++) {
+            String attribute = parts[i].trim();
+            if (attribute.equalsIgnoreCase("Max-Age=0")) {
+                return true;
+            }
+            if (attribute.regionMatches(true, 0, "Expires=", 0, "Expires=".length())) {
+                String expires = attribute.substring("Expires=".length()).trim();
+                try {
+                    if (ZonedDateTime.parse(expires, DateTimeFormatter.RFC_1123_DATE_TIME)
+                            .isBefore(ZonedDateTime.now())) {
+                        return true;
+                    }
+                } catch (DateTimeParseException ignored) {
+                    // Some servers emit non-standard dates; Max-Age remains the reliable signal.
+                }
+            }
+        }
+        return false;
     }
 
     private record AuthResponse(boolean error,

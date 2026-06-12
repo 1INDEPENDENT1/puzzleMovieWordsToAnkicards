@@ -62,6 +62,31 @@ class PuzzleMoviesAuthClientTest {
     }
 
     @Test
+    void keepsActiveCookiesAndDropsExpiredCookieDeletions() throws Exception {
+        PuzzleMoviesAuthClient client = new PuzzleMoviesAuthClient(
+                new StubHttpClient("""
+                        {"error":false,"user_id":100372848,"login":"miknsts@mail.ru","logged_in_cookie_name":"wp_logged_in_cookie","logged_in_cookie":"body-value"}
+                        """, List.of(
+                        "guest_id=old; expires=Wed, 04-Jun-2031 18:10:32 GMT; Path=/",
+                        "wp_logged_in_cookie=deleted; expires=Thu, 01-Jan-1970 00:00:01 GMT; Max-Age=0; path=/",
+                        "wp_auth_cookie=deleted; expires=Thu, 05-Jun-2025 18:26:53 GMT; Max-Age=0; path=/",
+                        "PHPSESSID=session; Path=/",
+                        "wp_auth_cookie=auth; Path=/wp-admin; HttpOnly; Expires=Tue, 03-Jun-2036 06:28:21 GMT",
+                        "wp_logged_in_cookie=logged-in; Path=/; HttpOnly; Expires=Tue, 03-Jun-2036 06:28:21 GMT",
+                        "guest_id=fresh; expires=Wed, 04-Jun-2031 18:10:32 GMT; Path=/"
+                )),
+                properties(),
+                new ObjectMapper());
+
+        PuzzleMoviesAuthResult result = client.authenticate("user@example.com", "correct");
+
+        assertTrue(result.isSuccess());
+        assertEquals(
+                "guest_id=fresh; PHPSESSID=session; wp_auth_cookie=auth; wp_logged_in_cookie=logged-in",
+                result.cookieHeader().orElseThrow());
+    }
+
+    @Test
     void rejectsBodyMissingLoggedInCookieData() throws Exception {
         PuzzleMoviesAuthClient client = new PuzzleMoviesAuthClient(
                 new StubHttpClient("""

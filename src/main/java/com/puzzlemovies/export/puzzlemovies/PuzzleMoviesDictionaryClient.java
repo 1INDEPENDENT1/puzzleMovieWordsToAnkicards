@@ -51,6 +51,9 @@ public class PuzzleMoviesDictionaryClient {
             if (body == null || body.isBlank()) {
                 break;
             }
+            if (isAnonymousPage(body)) {
+                throw new PuzzleMoviesSessionExpiredException();
+            }
             pages.add(body);
 
             if (!body.contains("page=" + (page + 1))) {
@@ -60,4 +63,8 @@ public class PuzzleMoviesDictionaryClient {
         return pages;
     }
 
+    private boolean isAnonymousPage(String body) {
+        return body.contains("movies-header__user-anon")
+                || body.contains("show_sign_popup()");
+    }
 }
