@@ -3,7 +3,7 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5434/search_engine
+    url: jdbc:postgresql://localhost:5432/puzzle_movies
     username: search
     password: ABZEabze2001
   jpa:

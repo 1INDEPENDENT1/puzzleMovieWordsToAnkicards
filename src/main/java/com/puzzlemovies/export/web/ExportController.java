@@ -1,6 +1,7 @@
 package com.puzzlemovies.export.web;
 
 import com.puzzlemovies.export.model.ExportJob;
+import com.puzzlemovies.export.model.ExportPhase;
 import com.puzzlemovies.export.model.ExportStatus;
 import com.puzzlemovies.export.model.ExportType;
 import com.puzzlemovies.export.model.User;
@@ -65,16 +66,20 @@ public class ExportController {
     public record ExportJobStatus(String id,
                                   ExportStatus status,
                                   int progressPercent,
+                                  ExportPhase phase,
                                   Instant startedAt,
                                   Instant completedAt,
+                                  Integer rowCount,
                                   String errorMessage) {
         static ExportJobStatus from(ExportJob job) {
             return new ExportJobStatus(
                     job.getId().toString(),
                     job.getStatus(),
                     job.getProgressPercent(),
+                    job.getPhase(),
                     job.getStartedAt(),
                     job.getCompletedAt(),
+                    job.getRowCount(),
                     job.getErrorMessage()
             );
         }

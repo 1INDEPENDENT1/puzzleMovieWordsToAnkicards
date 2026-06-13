@@ -38,6 +38,11 @@ public class ExportJob {
     @Column(nullable = false)
     private ExportStatus status;
 
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ExportPhase phase = ExportPhase.PENDING;
+
     @Min(0)
     @Max(100)
     @Column(nullable = false)
@@ -104,6 +109,21 @@ public class ExportJob {
 
     public void setStatus(ExportStatus status) {
         this.status = status;
+        if (status == ExportStatus.PENDING) {
+            this.phase = ExportPhase.PENDING;
+        } else if (status == ExportStatus.COMPLETED) {
+            this.phase = ExportPhase.COMPLETED;
+        } else if (status == ExportStatus.FAILED) {
+            this.phase = ExportPhase.FAILED;
+        }
+    }
+
+    public ExportPhase getPhase() {
+        return phase;
+    }
+
+    public void setPhase(ExportPhase phase) {
+        this.phase = phase;
     }
 
     public int getProgressPercent() {

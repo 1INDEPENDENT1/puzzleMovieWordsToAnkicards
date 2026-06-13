@@ -13,11 +13,18 @@
             <span>Status:</span>
             <strong id="status-text" th:text="${job.status}"></strong>
         </div>
+        <div class="status-line">
+            <span>Phase:</span>
+            <strong id="phase-text" th:text="${job.phase}"></strong>
+        </div>
         <div class="progress-bar">
             <div class="progress-fill" id="progress-fill" th:style="|width: ${job.progressPercent}%|"></div>
         </div>
         <div class="progress-meta">
             <span id="progress-percent" th:text="${job.progressPercent}"></span>% complete
+        </div>
+        <div class="progress-meta">
+            Rows: <span id="row-count" th:text="${job.rowCount != null ? job.rowCount : 0}"></span>
         </div>
         <div class="error" id="error-text" th:if="${job.errorMessage}" th:text="${job.errorMessage}"></div>
         <div class="download" id="download-link" style="display:none;">

@@ -1,6 +1,7 @@
 package com.puzzlemovies.export.puzzlemovies;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.puzzlemovies.export.config.ExportProperties;
 import org.springframework.stereotype.Component;
@@ -148,6 +149,7 @@ public class PuzzleMoviesAuthClient {
         return false;
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     private record AuthResponse(boolean error,
                                 String message,
                                 String login,
