@@ -21,3 +21,5 @@ specs/
 exports/
 # IntelliJ IDEA
 *.iml
+AGENTS.md
+set-codex.sh
