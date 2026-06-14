@@ -1,0 +1,22 @@
+target/
+*.class
+*.jar
+.gradle/
+build/
+*.log
+.env*
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/
+# Codex / AI tools
+.codex/
+.agents/
+# Spec Kit generated/internal files
+.specify/
+# Generated exports
+exports/
+# IntelliJ IDEA
+*.iml
