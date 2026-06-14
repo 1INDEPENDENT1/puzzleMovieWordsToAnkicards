@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:replace="~{::title}">PuzzleMovies Export</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="page" th:fragment="layout(title, content)">
+    <header class="site-header">
+        <div class="brand">PuzzleMovies Export</div>
+    </header>
+    <main class="site-main" th:insert="${content}"></main>
+</div>
+</body>
+</html>
