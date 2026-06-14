@@ -1,0 +1,154 @@
+openapi: 3.0.3
+info:
+  title: PuzzleMovies Export Web App
+  version: 0.1.0
+servers:
+  - url: /
+paths:
+  /login:
+    get:
+      summary: Render login page
+      responses:
+        "200":
+          description: Login page
+          content:
+            text/html:
+              schema:
+                type: string
+    post:
+      summary: Submit credentials and create session
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      responses:
+        "302":
+          description: Redirect to export menu on success
+        "401":
+          description: Invalid credentials
+          content:
+            text/html:
+              schema:
+                type: string
+  /exports/menu:
+    get:
+      summary: Render export menu page
+      responses:
+        "200":
+          description: Export menu page
+          content:
+            text/html:
+              schema:
+                type: string
+  /exports:
+    post:
+      summary: Start a new export job
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type:
+                  $ref: "#/components/schemas/ExportType"
+      responses:
+        "302":
+          description: Redirect to progress page
+  /exports/{id}:
+    get:
+      summary: Render progress page for an export job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Progress page
+          content:
+            text/html:
+              schema:
+                type: string
+  /exports/{id}/status:
+    get:
+      summary: Get export job status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportJobStatus"
+  /exports/{id}/download:
+    get:
+      summary: Download completed TSV export
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: TSV file
+          content:
+            text/tab-separated-values:
+              schema:
+                type: string
+                format: binary
+        "409":
+          description: Export not complete
+          content:
+            text/html:
+              schema:
+                type: string
+components:
+  schemas:
+    ExportType:
+      type: string
+      enum: [WORDS, PHRASES, COMBINED]
+    ExportStatus:
+      type: string
+      enum: [PENDING, RUNNING, COMPLETED, FAILED]
+    ExportJobStatus:
+      type: object
+      required: [id, status, progressPercent]
+      properties:
+        id:
+          type: string
+        status:
+          $ref: "#/components/schemas/ExportStatus"
+        progressPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true

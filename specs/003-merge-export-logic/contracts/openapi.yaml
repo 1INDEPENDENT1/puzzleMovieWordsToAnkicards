@@ -1,0 +1,145 @@
+openapi: 3.0.3
+info:
+  title: PuzzleMovies Improved Export Contract
+  version: 0.3.0
+  description: Web export endpoints after merging the richer export logic into the primary web flow.
+paths:
+  /exports:
+    post:
+      summary: Start an improved export job
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - type
+              properties:
+                type:
+                  $ref: '#/components/schemas/ExportType'
+      responses:
+        '302':
+          description: Redirects to the export progress page for the created job.
+        '401':
+          description: User is not signed in to the web app.
+  /exports/{id}:
+    get:
+      summary: Show export progress page
+      parameters:
+        - $ref: '#/components/parameters/ExportId'
+      responses:
+        '200':
+          description: Progress page including status, percent, current phase, and download link when ready.
+        '401':
+          description: User is not signed in to the web app.
+        '404':
+          description: Export job does not exist for the signed-in user.
+  /exports/{id}/status:
+    get:
+      summary: Read export job status
+      parameters:
+        - $ref: '#/components/parameters/ExportId'
+      responses:
+        '200':
+          description: Current export job status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportJobStatus'
+        '401':
+          description: User is not signed in to the web app.
+        '404':
+          description: Export job does not exist for the signed-in user.
+  /exports/{id}/download:
+    get:
+      summary: Download completed two-column TSV export
+      parameters:
+        - $ref: '#/components/parameters/ExportId'
+      responses:
+        '200':
+          description: Completed Anki-ready TSV file.
+          content:
+            text/tab-separated-values:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: User is not signed in to the web app.
+        '404':
+          description: Export job does not exist for the signed-in user.
+        '409':
+          description: Export is not complete and cannot be downloaded yet.
+components:
+  parameters:
+    ExportId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    ExportType:
+      type: string
+      enum:
+        - WORDS
+        - PHRASES
+        - COMBINED
+      description: |
+        WORDS exports word rows and may use saved phrases only as contextual examples.
+        PHRASES exports only standalone phrase rows.
+        COMBINED exports word rows with examples plus standalone phrase rows.
+    ExportStatus:
+      type: string
+      enum:
+        - PENDING
+        - RUNNING
+        - COMPLETED
+        - FAILED
+    ExportPhase:
+      type: string
+      enum:
+        - PENDING
+        - FETCHING_WORDS
+        - FETCHING_PHRASES
+        - PARSING
+        - DEDUPLICATING
+        - MATCHING
+        - WRITING
+        - COMPLETED
+        - FAILED
+    ExportJobStatus:
+      type: object
+      required:
+        - id
+        - status
+        - progressPercent
+        - phase
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/ExportStatus'
+        progressPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        phase:
+          $ref: '#/components/schemas/ExportPhase'
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        rowCount:
+          type: integer
+          minimum: 0
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
