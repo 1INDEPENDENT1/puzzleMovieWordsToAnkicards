@@ -13,13 +13,8 @@ Thumbs.db
 .idea/
 # Codex / AI tools
 .codex/
-.agents/
-.specify/
-specs/
 # Spec Kit generated/internal files
 # Generated exports
 exports/
 # IntelliJ IDEA
 *.iml
-AGENTS.md
-set-codex.sh
