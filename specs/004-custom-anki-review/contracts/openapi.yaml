@@ -1,0 +1,225 @@
+openapi: 3.0.3
+info:
+  title: PuzzleMovies Review Card Contract
+  version: 0.4.0
+  description: Web review endpoints for in-app Anki-style vocabulary practice.
+paths:
+  /reviews:
+    get:
+      summary: Show the review session page
+      responses:
+        '200':
+          description: Review page with the current due card, progress counts, or empty state.
+        '401':
+          description: User is not signed in to the web app.
+  /reviews/cards:
+    post:
+      summary: Create or refresh review cards from generated vocabulary records
+      description: Creates app-owned review cards while avoiding duplicate active cards for the signed-in user.
+      requestBody:
+        required: false
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                sourceExportId:
+                  type: string
+                  format: uuid
+                  description: Optional completed export job to use as the card source.
+      responses:
+        '302':
+          description: Redirects to the review page after cards are created or refreshed.
+        '401':
+          description: User is not signed in to the web app.
+        '404':
+          description: Requested source export does not exist for the signed-in user.
+        '409':
+          description: Requested source export is not complete or cannot produce review cards.
+  /reviews/next:
+    get:
+      summary: Fetch the next due review card
+      responses:
+        '200':
+          description: Next due card and review counts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewQueueResponse'
+        '401':
+          description: User is not signed in to the web app.
+  /reviews/cards/{id}/answer:
+    post:
+      summary: Answer the current review card
+      parameters:
+        - $ref: '#/components/parameters/ReviewCardId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewAnswerRequest'
+      responses:
+        '200':
+          description: Scheduling result, next card, and updated counts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewAnswerResponse'
+        '400':
+          description: Invalid answer choice or malformed request.
+        '401':
+          description: User is not signed in to the web app.
+        '404':
+          description: Review card does not exist for the signed-in user.
+        '409':
+          description: Review card is no longer answerable in the current state.
+components:
+  parameters:
+    ReviewCardId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    ReviewCardState:
+      type: string
+      enum:
+        - NEW
+        - LEARNING
+        - REVIEW
+        - RELEARNING
+        - SUSPENDED
+    ReviewAnswer:
+      type: string
+      enum:
+        - KNOWN
+        - UNKNOWN
+    LookupAction:
+      type: object
+      required:
+        - type
+        - label
+        - url
+      properties:
+        type:
+          type: string
+          enum:
+            - DICTIONARY
+            - PRONUNCIATION
+            - INSTANCE_TRANSLATION
+        label:
+          type: string
+        url:
+          type: string
+          format: uri
+    ReviewCardView:
+      type: object
+      required:
+        - id
+        - originalText
+        - state
+        - lookupActions
+      properties:
+        id:
+          type: string
+          format: uuid
+        originalText:
+          type: string
+        instanceText:
+          type: string
+          nullable: true
+        translationText:
+          type: string
+          nullable: true
+        sourceContext:
+          type: string
+          nullable: true
+        state:
+          $ref: '#/components/schemas/ReviewCardState'
+        dueAt:
+          type: string
+          format: date-time
+        lookupActions:
+          type: array
+          items:
+            $ref: '#/components/schemas/LookupAction'
+    ReviewCounts:
+      type: object
+      required:
+        - reviewedCount
+        - remainingDueCount
+      properties:
+        reviewedCount:
+          type: integer
+          minimum: 0
+        remainingDueCount:
+          type: integer
+          minimum: 0
+        nextDueAt:
+          type: string
+          format: date-time
+          nullable: true
+    ReviewQueueResponse:
+      type: object
+      required:
+        - counts
+      properties:
+        card:
+          allOf:
+            - $ref: '#/components/schemas/ReviewCardView'
+          nullable: true
+        counts:
+          $ref: '#/components/schemas/ReviewCounts'
+    ReviewAnswerRequest:
+      type: object
+      required:
+        - answer
+      properties:
+        answer:
+          $ref: '#/components/schemas/ReviewAnswer'
+        responseMillis:
+          type: integer
+          minimum: 0
+          nullable: true
+    SchedulingResult:
+      type: object
+      required:
+        - cardId
+        - answer
+        - previousState
+        - nextState
+        - nextDueAt
+        - nextIntervalDays
+      properties:
+        cardId:
+          type: string
+          format: uuid
+        answer:
+          $ref: '#/components/schemas/ReviewAnswer'
+        previousState:
+          $ref: '#/components/schemas/ReviewCardState'
+        nextState:
+          $ref: '#/components/schemas/ReviewCardState'
+        nextDueAt:
+          type: string
+          format: date-time
+        nextIntervalDays:
+          type: integer
+          minimum: 0
+    ReviewAnswerResponse:
+      type: object
+      required:
+        - result
+        - counts
+      properties:
+        result:
+          $ref: '#/components/schemas/SchedulingResult'
+        nextCard:
+          allOf:
+            - $ref: '#/components/schemas/ReviewCardView'
+          nullable: true
+        counts:
+          $ref: '#/components/schemas/ReviewCounts'
