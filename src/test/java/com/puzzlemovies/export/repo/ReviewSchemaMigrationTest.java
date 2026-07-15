@@ -19,6 +19,8 @@ class ReviewSchemaMigrationTest {
         assertTrue(migration.contains("ADD COLUMN IF NOT EXISTS content_key"));
         assertTrue(migration.contains("repetitions"));
         assertTrue(migration.contains("lapses"));
+        assertTrue(migration.contains("regexp_replace(front, '^(.+) \\1( .*)?$', '\\1')"));
+        assertTrue(migration.contains("translation_text = regexp_replace"));
         assertTrue(migration.contains("uk_review_cards_user_content_key"));
         assertTrue(migration.trim().endsWith("END $$@@"));
     }

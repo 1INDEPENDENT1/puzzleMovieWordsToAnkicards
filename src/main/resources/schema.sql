@@ -26,6 +26,13 @@ BEGIN
     IF has_front THEN
         EXECUTE $migration$
             UPDATE review_cards
+            SET original_text = regexp_replace(front, '^(.+) \1( .*)?$', '\1'),
+                translation_text = regexp_replace(front, '^(.+) \1 ?(.*)$', '\2')
+            WHERE front ~ '^(.+) \1( |$)'
+              AND (translation_text IS NULL OR btrim(translation_text) = '')
+        $migration$;
+        EXECUTE $migration$
+            UPDATE review_cards
             SET original_text = left(coalesce(nullif(btrim(front), ''), 'Legacy review card ' || id::text), 1000)
             WHERE original_text IS NULL OR btrim(original_text) = ''
         $migration$;
