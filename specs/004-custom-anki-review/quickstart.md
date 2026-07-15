@@ -12,14 +12,22 @@
 mvn spring-boot:run
 ```
 
+If `mvn` is not on `PATH`, use the local bundled Maven:
+
+```powershell
+& 'C:\Users\George\.codex\tools\apache-maven-3.9.11\bin\mvn.cmd' spring-boot:run
+```
+
 Open the local app and sign in through the existing PuzzleMovies login flow.
 
 ## Prepare Review Cards
 
 1. Open the export menu.
 2. Run a combined export so the app has generated vocabulary records with words, phrases, examples, and translations.
-3. From the completed export or menu, choose the action to create/refresh review cards.
+3. From the completed export progress page, choose the action to create/refresh review cards.
 4. Confirm the app redirects to the review screen.
+
+Note: Review cards are created from application-owned structured export records kept for the completed export while the app process is running. If the app was restarted after an export, run a fresh export before creating cards.
 
 ## Review Flow
 
@@ -49,6 +57,12 @@ Open the local app and sign in through the existing PuzzleMovies login flow.
 
 ```powershell
 mvn test
+```
+
+If needed:
+
+```powershell
+& 'C:\Users\George\.codex\tools\apache-maven-3.9.11\bin\mvn.cmd' test
 ```
 
 Recommended focused tests after implementation:

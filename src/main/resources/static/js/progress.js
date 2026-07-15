@@ -11,6 +11,7 @@
     const rowCount = document.getElementById('row-count');
     const errorText = document.getElementById('error-text');
     const downloadLink = document.getElementById('download-link');
+    const reviewCreate = document.getElementById('review-create');
 
     const update = (payload) => {
         statusText.textContent = payload.status;
@@ -24,6 +25,9 @@
         }
         if (payload.status === 'COMPLETED') {
             downloadLink.style.display = 'block';
+            if (reviewCreate) {
+                reviewCreate.style.display = 'block';
+            }
         }
     };
 

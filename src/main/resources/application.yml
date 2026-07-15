@@ -10,6 +10,11 @@ spring:
     hibernate:
       ddl-auto: update
     open-in-view: false
+  sql:
+    init:
+      # Run the idempotent review-card upgrade before Hibernate validates the entity shape.
+      mode: always
+      separator: "@@"
 
 export:
   output-dir: C:\Users\George\javaProjects\puzzleMovieWordsToAnkicards\exports

@@ -30,6 +30,13 @@
         <div class="download" id="download-link" style="display:none;">
             <a th:href="@{'/exports/' + ${job.id} + '/download'}">Download TSV</a>
         </div>
+        <form class="review-create" id="review-create"
+              method="post"
+              action="/reviews/cards"
+              th:style="${job.status.name() == 'COMPLETED'} ? '' : 'display:none;'">
+            <input type="hidden" name="sourceExportId" th:value="${job.id}">
+            <button type="submit">Create review cards</button>
+        </form>
     </div>
 
     <script th:src="@{/js/progress.js}"></script>

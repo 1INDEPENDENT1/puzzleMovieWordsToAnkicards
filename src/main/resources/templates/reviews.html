@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      th:replace="layout :: layout(~{::title}, ~{::section})">
+<head>
+    <title>Reviews - PuzzleMovies Export</title>
+</head>
+<section class="review-page">
+    <div class="review-header">
+        <div>
+            <h1>Reviews</h1>
+            <p class="muted">Study due PuzzleMovies vocabulary.</p>
+        </div>
+        <a class="button button-secondary" href="/exports/menu">Exports</a>
+    </div>
+
+    <div class="notice" th:if="${importMessage}" th:text="${importMessage}"></div>
+
+    <div class="review-progress" aria-live="polite">
+        <span><strong id="reviewed-count" th:text="${counts.reviewedCount()}">0</strong> reviewed</span>
+        <span><strong id="remaining-count" th:text="${counts.remainingDueCount()}">0</strong> due</span>
+        <span id="next-due"
+              th:text="${counts.nextDueAt() != null ? 'Next later' : ''}"></span>
+    </div>
+
+    <article class="review-card"
+             id="review-card"
+             th:classappend="${card == null} ? ' is-empty'"
+             th:attr="data-card-id=${card != null ? card.id() : ''}">
+        <div class="empty-state" id="empty-state" th:if="${card == null}">
+            <h2>No cards due</h2>
+            <p class="muted">Create cards from a completed export or come back when the next review is due.</p>
+        </div>
+
+        <div class="review-content" id="review-content" th:if="${card != null}">
+            <div class="card-face card-front">
+                <span class="eyebrow" th:text="${card.state()}">NEW</span>
+                <h2 id="card-original" th:text="${card.originalText()}">word</h2>
+                <p class="instance" id="card-instance"
+                   th:if="${card.instanceText()}"
+                   th:text="${card.instanceText()}"></p>
+            </div>
+
+            <div class="card-face card-back" id="card-back" hidden>
+                <h3>Answer</h3>
+                <p class="translation preserved-text" id="card-translation"
+                   th:text="${card.translationText() != null && !card.translationText().isBlank() ? card.translationText() : 'No translation saved'}"></p>
+                <p class="source" id="card-source"
+                   th:if="${card.sourceContext()}"
+                   th:text="${card.sourceContext()}"></p>
+                <div class="lookup-actions" id="lookup-actions">
+                    <a th:each="action : ${card.lookupActions()}"
+                       th:href="${action.url()}"
+                       th:text="${action.label()}"
+                       target="_blank"
+                       rel="noopener noreferrer"></a>
+                </div>
+            </div>
+        </div>
+    </article>
+
+    <div class="answer-controls" id="answer-controls" th:if="${card != null}">
+        <button type="button" id="reveal-button">Reveal</button>
+        <button type="button" class="answer-button unknown" data-answer="UNKNOWN" disabled>I don't know</button>
+        <button type="button" class="answer-button known" data-answer="KNOWN" disabled>I know</button>
+    </div>
+
+    <div class="review-status" id="review-status" aria-live="polite"></div>
+
+    <script th:src="@{/js/reviews.js}"></script>
+</section>
+</html>

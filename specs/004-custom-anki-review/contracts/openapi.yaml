@@ -115,6 +115,9 @@ components:
         url:
           type: string
           format: uri
+        sourceText:
+          type: string
+          nullable: true
     ReviewCardView:
       type: object
       required:
