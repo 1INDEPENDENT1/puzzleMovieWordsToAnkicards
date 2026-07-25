@@ -29,7 +29,10 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 @Service
 public class ExportService {
@@ -42,6 +45,7 @@ public class ExportService {
     private final ExportRecordBuilder recordBuilder;
     private final AnkiExportFormatter formatter;
     private final ExportProperties properties;
+    private final ConcurrentMap<UUID, List<ExportRecord>> generatedRecordsByJobId = new ConcurrentHashMap<>();
 
     public ExportService(ExportJobRepository exportJobRepository,
                          PuzzleSessionTokenRepository tokenRepository,
@@ -122,6 +126,7 @@ public class ExportService {
 
             update(job, ExportPhase.WRITING, 90);
             Path outputFile = writeOutput(jobId, records);
+            generatedRecordsByJobId.put(jobId, List.copyOf(records));
 
             job.setOutputFilePath(outputFile.toAbsolutePath().toString());
             job.setOutputFileName(outputFile.getFileName().toString());
@@ -160,5 +165,12 @@ public class ExportService {
         Path outputFile = outputDir.resolve("export-" + jobId + ".tsv");
         Files.writeString(outputFile, formatter.formatTsv(records));
         return outputFile;
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<List<ExportRecord>> generatedRecordsForCompletedExport(User user, UUID exportJobId) {
+        return exportJobRepository.findByIdAndUser(exportJobId, user)
+                .filter(job -> job.getStatus() == ExportStatus.COMPLETED)
+                .flatMap(job -> Optional.ofNullable(generatedRecordsByJobId.get(job.getId())));
     }
 }
