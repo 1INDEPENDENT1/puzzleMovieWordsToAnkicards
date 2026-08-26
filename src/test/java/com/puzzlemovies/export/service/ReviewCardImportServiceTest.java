@@ -62,6 +62,19 @@ class ReviewCardImportServiceTest {
         assertTrue(card.getTranslationText().isEmpty());
     }
 
+    @Test
+    void mergesIdenticalStandaloneOverflowExamplesOnRepeatImport() {
+        User user = ReviewTestFixtures.user("learner@example.com");
+        Map<String, ReviewCard> cards = new HashMap<>();
+        ReviewCardImportService service = new ReviewCardImportService(repositoryBackedBy(cards));
+        ReviewCardDraft standalone = new ReviewCardDraft(
+                "Runs daily.", null, "Бегает каждый день.", null, ExportRecord.RecordKind.PHRASE);
+
+        service.importDrafts(user, java.util.List.of(standalone, standalone));
+
+        assertEquals(1, cards.size());
+    }
+
     private ReviewCardDraft draft(String original, String instance, String translation, String source) {
         return new ReviewCardDraft(original, instance, translation, source, ExportRecord.RecordKind.WORD);
     }

@@ -2,6 +2,7 @@ package com.puzzlemovies.export.service;
 
 import com.puzzlemovies.export.config.ExportProperties;
 import com.puzzlemovies.export.export.AnkiExportFormatter;
+import com.puzzlemovies.export.export.CompleteWordExampleMatches;
 import com.puzzlemovies.export.export.DictionaryMatcher;
 import com.puzzlemovies.export.export.DictionaryParser;
 import com.puzzlemovies.export.export.DictionaryPhrase;
@@ -19,6 +20,7 @@ import com.puzzlemovies.export.model.User;
 import com.puzzlemovies.export.puzzlemovies.PuzzleMoviesDictionaryClient;
 import com.puzzlemovies.export.repo.ExportJobRepository;
 import com.puzzlemovies.export.repo.PuzzleSessionTokenRepository;
+import com.puzzlemovies.export.review.ReviewExportSource;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +48,7 @@ public class ExportService {
     private final AnkiExportFormatter formatter;
     private final ExportProperties properties;
     private final ConcurrentMap<UUID, List<ExportRecord>> generatedRecordsByJobId = new ConcurrentHashMap<>();
+    private final ConcurrentMap<UUID, ReviewExportSource> generatedReviewSourcesByJobId = new ConcurrentHashMap<>();
 
     public ExportService(ExportJobRepository exportJobRepository,
                          PuzzleSessionTokenRepository tokenRepository,
@@ -113,9 +116,10 @@ public class ExportService {
             phrases = deduplicator.dedupePhrases(phrases);
 
             update(job, ExportPhase.MATCHING, 75);
-            Map<String, List<PhraseExample>> examplesByWord = type == ExportType.PHRASES
-                    ? Map.of()
-                    : matcher.match(words, phrases);
+            CompleteWordExampleMatches completeMatches = type == ExportType.PHRASES
+                    ? CompleteWordExampleMatches.empty()
+                    : matcher.matchAll(words, phrases);
+            Map<String, List<PhraseExample>> examplesByWord = matcher.match(words, phrases);
 
             List<ExportRecord> records = recordBuilder.buildRecords(
                     words,
@@ -127,6 +131,7 @@ public class ExportService {
             update(job, ExportPhase.WRITING, 90);
             Path outputFile = writeOutput(jobId, records);
             generatedRecordsByJobId.put(jobId, List.copyOf(records));
+            generatedReviewSourcesByJobId.put(jobId, new ReviewExportSource(words, phrases, completeMatches));
 
             job.setOutputFilePath(outputFile.toAbsolutePath().toString());
             job.setOutputFileName(outputFile.getFileName().toString());
@@ -172,5 +177,12 @@ public class ExportService {
         return exportJobRepository.findByIdAndUser(exportJobId, user)
                 .filter(job -> job.getStatus() == ExportStatus.COMPLETED)
                 .flatMap(job -> Optional.ofNullable(generatedRecordsByJobId.get(job.getId())));
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<ReviewExportSource> generatedReviewSourceForCompletedExport(User user, UUID exportJobId) {
+        return exportJobRepository.findByIdAndUser(exportJobId, user)
+                .filter(job -> job.getStatus() == ExportStatus.COMPLETED)
+                .flatMap(job -> Optional.ofNullable(generatedReviewSourcesByJobId.get(job.getId())));
     }
 }

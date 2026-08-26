@@ -3,6 +3,7 @@
 DO $$
 DECLARE
     has_front boolean;
+    has_back boolean;
     has_repetitions boolean;
     has_lapses boolean;
 BEGIN
@@ -42,12 +43,26 @@ BEGIN
         WHERE original_text IS NULL OR btrim(original_text) = '';
     END IF;
 
+    -- The early prototype stored its display payload in front/back. Hibernate no longer writes
+    -- those legacy columns, so they must not reject inserts for the structured card model.
+    SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'review_cards' AND column_name = 'back'
+    ) INTO has_back;
+    IF has_front THEN
+        ALTER TABLE review_cards ALTER COLUMN front DROP NOT NULL;
+    END IF;
+    IF has_back THEN
+        ALTER TABLE review_cards ALTER COLUMN back DROP NOT NULL;
+    END IF;
+
     SELECT EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'review_cards' AND column_name = 'repetitions'
     ) INTO has_repetitions;
     IF has_repetitions THEN
         EXECUTE 'UPDATE review_cards SET review_count = coalesce(review_count, repetitions, 0)';
+        ALTER TABLE review_cards ALTER COLUMN repetitions DROP NOT NULL;
     ELSE
         UPDATE review_cards SET review_count = coalesce(review_count, 0);
     END IF;
@@ -58,6 +73,7 @@ BEGIN
     ) INTO has_lapses;
     IF has_lapses THEN
         EXECUTE 'UPDATE review_cards SET lapse_count = coalesce(lapse_count, lapses, 0)';
+        ALTER TABLE review_cards ALTER COLUMN lapses DROP NOT NULL;
     ELSE
         UPDATE review_cards SET lapse_count = coalesce(lapse_count, 0);
     END IF;

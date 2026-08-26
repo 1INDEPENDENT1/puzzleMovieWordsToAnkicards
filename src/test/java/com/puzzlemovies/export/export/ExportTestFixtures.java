@@ -58,6 +58,23 @@ public final class ExportTestFixtures {
         return List.of(PHRASE_PAGE);
     }
 
+    public static DictionaryWord word(String sourceText, String translation, String matchingIdentity) {
+        return new DictionaryWord(sourceText,
+                translation == null || translation.isBlank() ? Set.of() : Set.of(translation),
+                matchingIdentity,
+                false);
+    }
+
+    public static DictionaryPhrase phrase(String sourceText, String translation, String... matchingTokens) {
+        return new DictionaryPhrase(sourceText,
+                translation == null || translation.isBlank() ? Set.of() : Set.of(translation),
+                null,
+                null,
+                Set.of(matchingTokens),
+                sourceText.toLowerCase(Locale.ROOT),
+                false);
+    }
+
     public static Lemmatizer testLemmatizer() {
         return new Lemmatizer() {
             @Override
