@@ -1,6 +1,9 @@
 package com.puzzlemovies.export.review;
 
 import com.puzzlemovies.export.export.ExportRecord;
+import com.puzzlemovies.export.export.CompleteWordExampleMatches;
+import com.puzzlemovies.export.export.DictionaryPhrase;
+import com.puzzlemovies.export.export.DictionaryWord;
 import com.puzzlemovies.export.model.ReviewAnswer;
 import com.puzzlemovies.export.model.ReviewAttempt;
 import com.puzzlemovies.export.model.ReviewCard;
@@ -9,6 +12,8 @@ import com.puzzlemovies.export.model.User;
 
 import java.time.Instant;
 import java.util.UUID;
+import java.util.List;
+import java.util.Map;
 
 public final class ReviewTestFixtures {
     private ReviewTestFixtures() {
@@ -60,5 +65,11 @@ public final class ReviewTestFixtures {
 
     public static ExportRecord phraseRecord() {
         return new ExportRecord("The moon is bright.", "Луна яркая.", ExportRecord.RecordKind.PHRASE);
+    }
+
+    public static ReviewExportSource source(List<DictionaryWord> words,
+                                            List<DictionaryPhrase> examples,
+                                            Map<String, List<com.puzzlemovies.export.export.PhraseExample>> matches) {
+        return new ReviewExportSource(words, examples, new CompleteWordExampleMatches(matches));
     }
 }

@@ -12,10 +12,12 @@ import com.puzzlemovies.export.model.ExportJob;
 import com.puzzlemovies.export.model.ExportPhase;
 import com.puzzlemovies.export.model.ExportStatus;
 import com.puzzlemovies.export.model.ExportType;
+import com.puzzlemovies.export.model.User;
 import com.puzzlemovies.export.puzzlemovies.PuzzleMoviesDictionaryClient;
 import com.puzzlemovies.export.puzzlemovies.PuzzleMoviesSessionExpiredException;
 import com.puzzlemovies.export.repo.ExportJobRepository;
 import com.puzzlemovies.export.repo.PuzzleSessionTokenRepository;
+import com.puzzlemovies.export.review.ReviewCardDraftFactory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -23,6 +25,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -69,6 +72,10 @@ class ExportServiceTest {
         assertTrue(output.contains("I am running home."));
         assertTrue(output.contains("The moon is bright."));
         assertTrue(output.lines().noneMatch(line -> line.startsWith("I am running home.\t")));
+
+        assertTrue(context.service.generatedReviewSourceForCompletedExport(context.user, context.job.getId()).isPresent());
+        assertEquals(2, context.service.generatedReviewSourceForCompletedExport(context.user, context.job.getId())
+                .orElseThrow().examples().size());
     }
 
     @Test
@@ -107,6 +114,28 @@ class ExportServiceTest {
         verify(context.exportJobRepository, atLeastOnce()).save(context.job);
     }
 
+    @Test
+    void mixedFiftyItemExportRetainsEveryStructuredReviewContextWithoutChangingTsvRows() throws Exception {
+        TestContext context = context(ExportType.COMBINED);
+        String wordRows = IntStream.range(0, 50)
+                .mapToObj(index -> "<tr><td>word" + index + "</td><td>translation" + index + "</td></tr>")
+                .collect(java.util.stream.Collectors.joining());
+        String phraseRows = IntStream.range(0, 50)
+                .mapToObj(index -> "<tr><td>word" + index + " example</td><td>example translation" + index + "</td></tr>")
+                .collect(java.util.stream.Collectors.joining());
+        when(context.dictionaryClient.fetchWordPages(anyString())).thenReturn(java.util.List.of("<table>" + wordRows + "</table>"));
+        when(context.dictionaryClient.fetchPhrasePages(anyString())).thenReturn(java.util.List.of("<table>" + phraseRows + "</table>"));
+
+        context.service.runExportAsync(context.job.getId(), ExportType.COMBINED, "cookie=value");
+
+        var source = context.service.generatedReviewSourceForCompletedExport(context.user, context.job.getId()).orElseThrow();
+        var drafts = new ReviewCardDraftFactory().createDrafts(source);
+        assertEquals(100, context.job.getRowCount());
+        assertEquals(50, drafts.size());
+        assertEquals(50, new java.util.HashSet<>(drafts).size());
+        assertEquals(50, source.completeMatches().examplesByWord().size());
+    }
+
     private TestContext context(ExportType type) {
         ExportJobRepository exportJobRepository = mock(ExportJobRepository.class);
         PuzzleSessionTokenRepository tokenRepository = mock(PuzzleSessionTokenRepository.class);
@@ -115,8 +144,13 @@ class ExportServiceTest {
         job.setId(UUID.randomUUID());
         job.setType(type);
         job.setStatus(ExportStatus.PENDING);
+        User user = new User();
+        user.setId(UUID.randomUUID());
+        user.setEmail("learner@example.com");
+        job.setUser(user);
 
         when(exportJobRepository.findById(job.getId())).thenReturn(Optional.of(job));
+        when(exportJobRepository.findByIdAndUser(job.getId(), user)).thenReturn(Optional.of(job));
 
         ExportProperties properties = new ExportProperties();
         properties.setOutputDir(tempDir.toString());
@@ -132,12 +166,13 @@ class ExportServiceTest {
                 new AnkiExportFormatter(),
                 properties);
 
-        return new TestContext(service, exportJobRepository, dictionaryClient, job);
+        return new TestContext(service, exportJobRepository, dictionaryClient, job, user);
     }
 
     private record TestContext(ExportService service,
                                ExportJobRepository exportJobRepository,
                                PuzzleMoviesDictionaryClient dictionaryClient,
-                               ExportJob job) {
+                               ExportJob job,
+                               User user) {
     }
 }

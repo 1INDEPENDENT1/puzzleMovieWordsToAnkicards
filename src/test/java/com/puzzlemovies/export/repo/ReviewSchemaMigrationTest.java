@@ -21,6 +21,10 @@ class ReviewSchemaMigrationTest {
         assertTrue(migration.contains("lapses"));
         assertTrue(migration.contains("regexp_replace(front, '^(.+) \\1( .*)?$', '\\1')"));
         assertTrue(migration.contains("translation_text = regexp_replace"));
+        assertTrue(migration.contains("ALTER COLUMN front DROP NOT NULL"));
+        assertTrue(migration.contains("ALTER COLUMN back DROP NOT NULL"));
+        assertTrue(migration.contains("ALTER COLUMN repetitions DROP NOT NULL"));
+        assertTrue(migration.contains("ALTER COLUMN lapses DROP NOT NULL"));
         assertTrue(migration.contains("uk_review_cards_user_content_key"));
         assertTrue(migration.trim().endsWith("END $$@@"));
     }

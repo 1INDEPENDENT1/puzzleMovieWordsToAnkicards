@@ -1,6 +1,10 @@
 package com.puzzlemovies.export.web;
 
 import com.puzzlemovies.export.export.ExportRecord;
+import com.puzzlemovies.export.export.CompleteWordExampleMatches;
+import com.puzzlemovies.export.export.DictionaryPhrase;
+import com.puzzlemovies.export.export.DictionaryWord;
+import com.puzzlemovies.export.export.PhraseExample;
 import com.puzzlemovies.export.model.ExportJob;
 import com.puzzlemovies.export.model.ExportStatus;
 import com.puzzlemovies.export.model.ExportType;
@@ -8,6 +12,8 @@ import com.puzzlemovies.export.model.ReviewAnswer;
 import com.puzzlemovies.export.model.User;
 import com.puzzlemovies.export.repo.ExportJobRepository;
 import com.puzzlemovies.export.review.ReviewCardDraftFactory;
+import com.puzzlemovies.export.review.ReviewCardDraft;
+import com.puzzlemovies.export.review.ReviewExportSource;
 import com.puzzlemovies.export.review.ReviewTestFixtures;
 import com.puzzlemovies.export.service.ExportService;
 import com.puzzlemovies.export.service.ReviewCardImportService;
@@ -23,11 +29,16 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Map;
+import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.ArgumentCaptor;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -60,15 +71,25 @@ class ReviewControllerTest {
         job.setUser(user);
         job.setType(ExportType.COMBINED);
         job.setStatus(ExportStatus.COMPLETED);
-        List<ExportRecord> records = List.of(ReviewTestFixtures.wordRecordWithExample());
+        DictionaryWord word = new DictionaryWord("Run", Set.of("бежать"), "run", false);
+        DictionaryPhrase phrase = new DictionaryPhrase("I am running home.", Set.of("Я бегу домой."),
+                "Arrival", null, Set.of("run"), "i am run home", false);
+        PhraseExample example = new PhraseExample("run", phrase.sourceText(), phrase.translations(), phrase.movieTitle(), phrase.movieUrl());
+        ReviewExportSource source = new ReviewExportSource(List.of(word), List.of(phrase),
+                new CompleteWordExampleMatches(Map.of("run", List.of(example))));
         when(context.exportJobRepository.findByIdAndUser(job.getId(), user)).thenReturn(Optional.of(job));
-        when(context.exportService.generatedRecordsForCompletedExport(user, job.getId())).thenReturn(Optional.of(records));
+        when(context.exportService.generatedReviewSourceForCompletedExport(user, job.getId())).thenReturn(Optional.of(source));
         when(context.importService.importDrafts(eq(user), any()))
                 .thenReturn(new ReviewCardImportService.ImportResult(1, 0));
 
         context.mvc.perform(post("/reviews/cards").param("sourceExportId", job.getId().toString()))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/reviews"));
+
+        ArgumentCaptor<List<ReviewCardDraft>> drafts = ArgumentCaptor.forClass(List.class);
+        verify(context.importService).importDrafts(eq(user), drafts.capture());
+        assertEquals("Run", drafts.getValue().get(0).originalText());
+        assertEquals("I am running home.", drafts.getValue().get(0).instanceText());
     }
 
     @Test
@@ -203,7 +224,7 @@ class ReviewControllerTest {
         when(context.exportJobRepository.findByIdAndUser(missingId, user)).thenReturn(Optional.empty());
         when(context.exportJobRepository.findByIdAndUser(runningId, user)).thenReturn(Optional.of(running));
         when(context.exportJobRepository.findByIdAndUser(unavailableId, user)).thenReturn(Optional.of(completed));
-        when(context.exportService.generatedRecordsForCompletedExport(user, unavailableId)).thenReturn(Optional.empty());
+        when(context.exportService.generatedReviewSourceForCompletedExport(user, unavailableId)).thenReturn(Optional.empty());
 
         context.mvc.perform(post("/reviews/cards").param("sourceExportId", missingId.toString()))
                 .andExpect(status().isNotFound());

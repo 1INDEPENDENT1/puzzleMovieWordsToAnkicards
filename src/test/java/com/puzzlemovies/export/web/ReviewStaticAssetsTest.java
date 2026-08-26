@@ -36,5 +36,7 @@ class ReviewStaticAssetsTest {
         assertTrue(html.contains("remaining-count"));
         assertTrue(html.contains("data-answer=\"UNKNOWN\""));
         assertTrue(html.contains("data-answer=\"KNOWN\""));
+        assertTrue(html.contains("card.instanceText()"));
+        assertTrue(html.contains("No translation saved"));
     }
 }

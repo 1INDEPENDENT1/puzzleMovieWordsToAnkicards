@@ -1,12 +1,12 @@
 package com.puzzlemovies.export.web;
 
-import com.puzzlemovies.export.export.ExportRecord;
 import com.puzzlemovies.export.model.ExportJob;
 import com.puzzlemovies.export.model.ExportStatus;
 import com.puzzlemovies.export.model.User;
 import com.puzzlemovies.export.repo.ExportJobRepository;
 import com.puzzlemovies.export.review.ReviewCardDraft;
 import com.puzzlemovies.export.review.ReviewCardDraftFactory;
+import com.puzzlemovies.export.review.ReviewExportSource;
 import com.puzzlemovies.export.service.ExportService;
 import com.puzzlemovies.export.service.ReviewCardImportService;
 import com.puzzlemovies.export.service.ReviewService;
@@ -24,7 +24,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.List;
 import java.util.UUID;
 
 @Controller
@@ -80,11 +79,11 @@ public class ReviewController {
         if (job.getStatus() != ExportStatus.COMPLETED) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Export is not completed");
         }
-        List<ExportRecord> records = exportService.generatedRecordsForCompletedExport(user, sourceExportId)
+        ReviewExportSource source = exportService.generatedReviewSourceForCompletedExport(user, sourceExportId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.CONFLICT,
                         "Generated review records are no longer available; run a fresh export"));
-        List<ReviewCardDraft> drafts = draftFactory.createDrafts(records);
+        java.util.List<ReviewCardDraft> drafts = draftFactory.createDrafts(source);
         ReviewCardImportService.ImportResult result = importService.importDrafts(user, drafts);
         session.setAttribute(REVIEWED_COUNT, 0);
         session.setAttribute(IMPORT_MESSAGE,
