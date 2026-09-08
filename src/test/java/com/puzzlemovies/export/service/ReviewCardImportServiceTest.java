@@ -21,6 +21,43 @@ import static org.mockito.Mockito.when;
 
 class ReviewCardImportServiceTest {
     @Test
+    void refreshPreservesCustomizedContentIdentityAndSchedule() {
+        User user = ReviewTestFixtures.user("learner@example.com");
+        Map<String, ReviewCard> cards = new HashMap<>();
+        ReviewCardImportService service = new ReviewCardImportService(repositoryBackedBy(cards));
+        ReviewCardDraft source = draft("Run", "Run home.", "бежать", "Arrival");
+        service.importDrafts(user, java.util.List.of(source));
+        ReviewCard card = cards.values().iterator().next();
+        var id = card.getId();
+        var due = card.getDueAt();
+        card.setReviewCount(5);
+        card.setManualContentOverride(true);
+        card.setOriginalText("Sprint");
+        card.setInstanceText("");
+        card.setTranslationText("custom");
+        service.importDrafts(user, java.util.List.of(source));
+        assertEquals("Sprint", card.getOriginalText());
+        assertEquals("", card.getInstanceText());
+        assertEquals("custom", card.getTranslationText());
+        assertEquals(id, card.getId());
+        assertEquals(due, card.getDueAt());
+        assertEquals(5, card.getReviewCount());
+        assertEquals(service.contentKey(source), card.getContentKey());
+    }
+
+    @Test
+    void refreshStillUpdatesUncustomizedContent() {
+        User user = ReviewTestFixtures.user("learner@example.com");
+        Map<String, ReviewCard> cards = new HashMap<>();
+        ReviewCardImportService service = new ReviewCardImportService(repositoryBackedBy(cards));
+        service.importDrafts(user, java.util.List.of(draft("run", null, "translation", null)));
+        service.importDrafts(user, java.util.List.of(draft("RUN", null, "TRANSLATION", null)));
+        assertEquals(1, cards.size());
+        assertEquals("RUN", cards.values().iterator().next().getOriginalText());
+        assertEquals("TRANSLATION", cards.values().iterator().next().getTranslationText());
+    }
+
+    @Test
     void generatesStableContentKeysAndPreventsDuplicateCards() {
         User user = ReviewTestFixtures.user("learner@example.com");
         Map<String, ReviewCard> cards = new HashMap<>();

@@ -13,6 +13,8 @@ import com.puzzlemovies.export.web.ReviewDtos;
 import com.puzzlemovies.export.web.ReviewDtos.LookupAction;
 import com.puzzlemovies.export.web.ReviewDtos.LookupActionType;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Page;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -34,6 +36,17 @@ public class ReviewService {
         this.reviewCardRepository = reviewCardRepository;
         this.reviewAttemptRepository = reviewAttemptRepository;
         this.scheduler = scheduler;
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ReviewDtos.CardLibraryItem> cardLibrary(User user, int page) {
+        if (page < 0) {
+            throw new IllegalArgumentException("Page must be nonnegative");
+        }
+        return reviewCardRepository.findLibrary(user, PageRequest.of(page, 25))
+                .map(row -> new ReviewDtos.CardLibraryItem(row.getId(), row.getVersion(), row.getOriginalText(),
+                        row.getInstanceText(), row.getTranslationText(), row.getTotalAnswers(),
+                        row.getCorrectAnswers(), row.getIncorrectAnswers()));
     }
 
     @Transactional(readOnly = true)
@@ -107,7 +120,54 @@ public class ReviewService {
                 card.getSourceContext(),
                 card.getState(),
                 card.getDueAt(),
-                lookupActions(card));
+                lookupActions(card),
+                card.getVersion());
+    }
+
+    @Transactional
+    public ReviewDtos.CardContentUpdateResponse updateContent(User user, UUID cardId,
+                                                               ReviewDtos.CardContentUpdateRequest request) {
+        ReviewCard card = reviewCardRepository.findByIdAndUser(cardId, user)
+                .orElseThrow(CardNotFoundException::new);
+        if (request == null || request.version() == null || request.version() < 0) {
+            throw new InvalidCardContentException("A valid card version is required.");
+        }
+        String original = request.originalText() == null ? "" : request.originalText().strip();
+        if (original.isBlank() || original.length() > 1000) {
+            throw new InvalidCardContentException("Original text is required and must be at most 1,000 characters.");
+        }
+        String instance = optionalText(request.instanceText(), 4000, "Example");
+        String translation = optionalText(request.translationText(), 8000, "Translation");
+        if (request.version() != card.getVersion()) {
+            throw new StaleCardException();
+        }
+        card.setOriginalText(original);
+        card.setInstanceText(instance);
+        card.setTranslationText(translation);
+        card.markContentCustomized();
+        try {
+            // Flush inside this transaction so racing edits return a conflict and no partial update.
+            card = reviewCardRepository.saveAndFlush(card);
+        } catch (OptimisticLockingFailureException ex) {
+            throw new StaleCardException();
+        }
+        return new ReviewDtos.CardContentUpdateResponse(toView(card));
+    }
+
+    private String optionalText(String value, int maxLength, String field) {
+        if (value != null && value.length() > maxLength) {
+            throw new InvalidCardContentException(field + " must be at most " + maxLength + " characters.");
+        }
+        return value == null || value.isBlank() ? "" : value;
+    }
+
+    public static class InvalidCardContentException extends RuntimeException {
+        public InvalidCardContentException(String message) {
+            super(message);
+        }
+    }
+
+    public static class StaleCardException extends RuntimeException {
     }
 
     private ReviewDtos.ReviewCounts counts(User user, int reviewedCount, Instant now) {

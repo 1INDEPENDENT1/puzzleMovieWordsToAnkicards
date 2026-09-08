@@ -30,6 +30,110 @@ import static org.mockito.Mockito.when;
 
 class ReviewServiceTest {
     @Test
+    void contentEditPreservesScheduleIdentityAndHistoryAndRefreshesLookups() {
+        User user = ReviewTestFixtures.user("edit@example.com");
+        var card = ReviewTestFixtures.versionedCard(user, "Run", 4);
+        card.setState(ReviewCardState.REVIEW);
+        card.setReviewCount(8);
+        card.setLapseCount(2);
+        card.setIntervalDays(7);
+        card.setEaseFactor(2.3);
+        card.setLastReviewedAt(Instant.now().minusSeconds(800));
+        var due = card.getDueAt();
+        var last = card.getLastReviewedAt();
+        var key = card.getContentKey();
+        var cards = mock(ReviewCardRepository.class);
+        var attempts = mock(ReviewAttemptRepository.class);
+        when(cards.findByIdAndUser(card.getId(), user)).thenReturn(Optional.of(card));
+        when(cards.saveAndFlush(card)).thenAnswer(invocation -> {
+            org.springframework.test.util.ReflectionTestUtils.setField(card, "version", 5L);
+            return card;
+        });
+        var service = new ReviewService(cards, attempts, new BinaryReviewScheduler());
+        var updated = service.updateContent(user, card.getId(),
+                new ReviewDtos.CardContentUpdateRequest("  Walk  ", "Walk home.", "", 4L)).card();
+        assertEquals("Walk", updated.originalText());
+        assertEquals("", updated.translationText());
+        assertEquals("Walk home.", updated.instanceText());
+        assertEquals(5, updated.version());
+        assertEquals("Walk", updated.lookupActions().get(0).sourceText());
+        org.junit.jupiter.api.Assertions.assertTrue(card.isManualContentOverride());
+        assertEquals(key, card.getContentKey());
+        assertEquals(due, card.getDueAt());
+        assertEquals(last, card.getLastReviewedAt());
+        assertEquals(8, card.getReviewCount());
+        assertEquals(2, card.getLapseCount());
+        assertEquals(7, card.getIntervalDays());
+        assertEquals(2.3, card.getEaseFactor());
+        assertEquals(ReviewCardState.REVIEW, card.getState());
+        org.mockito.Mockito.verifyNoInteractions(attempts);
+    }
+
+    @Test
+    void invalidOrStaleEditsNeverMutateSavedContent() {
+        User user = ReviewTestFixtures.user("edit@example.com");
+        var card = ReviewTestFixtures.versionedCard(user, "Run", 4);
+        var cards = mock(ReviewCardRepository.class);
+        var attempts = mock(ReviewAttemptRepository.class);
+        when(cards.findByIdAndUser(card.getId(), user)).thenReturn(Optional.of(card));
+        var service = new ReviewService(cards, attempts, new BinaryReviewScheduler());
+        var invalidRequests = List.of(
+                new ReviewDtos.CardContentUpdateRequest(" \n ", "", "", 4L),
+                new ReviewDtos.CardContentUpdateRequest(null, "", "", 4L),
+                new ReviewDtos.CardContentUpdateRequest("a".repeat(1001), "", "", 4L),
+                new ReviewDtos.CardContentUpdateRequest("valid", "a".repeat(4001), "", 4L),
+                new ReviewDtos.CardContentUpdateRequest("valid", "", "a".repeat(8001), 4L),
+                new ReviewDtos.CardContentUpdateRequest("valid", null, null, null),
+                new ReviewDtos.CardContentUpdateRequest("valid", null, null, -1L));
+        for (var request : invalidRequests) {
+            assertThrows(ReviewService.InvalidCardContentException.class,
+                    () -> service.updateContent(user, card.getId(), request));
+        }
+        assertThrows(ReviewService.StaleCardException.class, () -> service.updateContent(user, card.getId(),
+                new ReviewDtos.CardContentUpdateRequest("Walk", null, null, 3L)));
+        assertThrows(ReviewService.CardNotFoundException.class, () -> service.updateContent(user, java.util.UUID.randomUUID(),
+                new ReviewDtos.CardContentUpdateRequest("Walk", null, null, 4L)));
+        assertEquals("Run", card.getOriginalText());
+        assertFalse(card.isManualContentOverride());
+        org.mockito.Mockito.verify(cards, org.mockito.Mockito.never()).saveAndFlush(any());
+        org.mockito.Mockito.verifyNoInteractions(attempts);
+    }
+
+    @Test
+    void concurrentDatabaseUpdateBecomesStaleConflict() {
+        var user = ReviewTestFixtures.user("edit@example.com");
+        var card = ReviewTestFixtures.versionedCard(user, "Run", 0);
+        var cards = mock(ReviewCardRepository.class);
+        when(cards.findByIdAndUser(card.getId(), user)).thenReturn(Optional.of(card));
+        when(cards.saveAndFlush(card)).thenThrow(new org.springframework.orm.ObjectOptimisticLockingFailureException(ReviewCard.class, card.getId()));
+        var service = new ReviewService(cards, mock(ReviewAttemptRepository.class), new BinaryReviewScheduler());
+        assertThrows(ReviewService.StaleCardException.class, () -> service.updateContent(user, card.getId(),
+                new ReviewDtos.CardContentUpdateRequest("Walk", null, null, 0L)));
+    }
+
+    @Test
+    void libraryUsesAttemptTotalsAndLeavesUnansweredPercentageUnavailable() {
+        User user = ReviewTestFixtures.user("library@example.com");
+        ReviewCardRepository cards = mock(ReviewCardRepository.class);
+        var mixed = mock(ReviewCardRepository.CardLibraryRow.class);
+        when(mixed.getTotalAnswers()).thenReturn(3L);
+        when(mixed.getCorrectAnswers()).thenReturn(2L);
+        when(mixed.getIncorrectAnswers()).thenReturn(1L);
+        var empty = mock(ReviewCardRepository.CardLibraryRow.class);
+        when(cards.findLibrary(eq(user), any(Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(mixed, empty)));
+        var attempts = mock(ReviewAttemptRepository.class);
+        var page = new ReviewService(cards, attempts, new BinaryReviewScheduler()).cardLibrary(user, 2);
+        assertEquals(3, page.getContent().get(0).totalAnswers());
+        assertEquals(2, page.getContent().get(0).correctAnswers());
+        assertEquals(1, page.getContent().get(0).incorrectAnswers());
+        assertEquals(200.0 / 3, page.getContent().get(0).correctAnswerPercentage(), 0.0001);
+        assertEquals(null, page.getContent().get(1).correctAnswerPercentage());
+        verify(cards).findLibrary(user, org.springframework.data.domain.PageRequest.of(2, 25));
+        org.mockito.Mockito.verifyNoInteractions(attempts);
+    }
+
+    @Test
     void loadsDueQueueAndBuildsLookupActionsWithoutPersistedUrls() {
         User user = ReviewTestFixtures.user("learner@example.com");
         ReviewCard card = ReviewTestFixtures.dueCard(user, "Run");

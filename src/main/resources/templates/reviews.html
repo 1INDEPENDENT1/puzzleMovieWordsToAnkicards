@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org"
-      th:replace="layout :: layout(~{::title}, ~{::section})">
+      th:replace="~{layout :: layout(~{::title}, ~{::section})}">
 <head>
     <title>Reviews - PuzzleMovies Export</title>
 </head>
@@ -10,7 +10,10 @@
             <h1>Reviews</h1>
             <p class="muted">Study due PuzzleMovies vocabulary.</p>
         </div>
-        <a class="button button-secondary" href="/exports/menu">Exports</a>
+        <nav class="page-actions" aria-label="Study navigation">
+            <a class="button button-secondary" href="/cards">Card library</a>
+            <a class="button button-secondary" href="/exports/menu">Exports</a>
+        </nav>
     </div>
 
     <div class="notice" th:if="${importMessage}" th:text="${importMessage}"></div>
@@ -25,7 +28,7 @@
     <article class="review-card"
              id="review-card"
              th:classappend="${card == null} ? ' is-empty'"
-             th:attr="data-card-id=${card != null ? card.id() : ''}">
+             th:attr="data-card-id=${card != null ? card.id() : ''},data-version=${card != null ? card.version() : ''},data-original=${card != null ? card.originalText() : ''},data-instance=${card != null ? card.instanceText() : ''},data-translation=${card != null ? card.translationText() : ''}">
         <div class="empty-state" id="empty-state" th:if="${card == null}">
             <h2>No cards due</h2>
             <p class="muted">Create cards from a completed export or come back when the next review is due.</p>
@@ -34,6 +37,7 @@
         <div class="review-content" id="review-content" th:if="${card != null}">
             <div class="card-face card-front">
                 <span class="eyebrow" th:text="${card.state()}">NEW</span>
+                <button type="button" class="button-secondary edit-current" data-edit-current>Edit card</button>
                 <h2 id="card-original" th:text="${card.originalText()}">word</h2>
                 <p class="instance" id="card-instance"
                    th:if="${card.instanceText()}"
@@ -65,6 +69,21 @@
     </div>
 
     <div class="review-status" id="review-status" aria-live="polite"></div>
+
+    <dialog id="review-editor" class="card-editor" aria-labelledby="review-editor-title">
+        <form id="review-edit-form" class="form">
+            <h2 id="review-editor-title">Edit current card</h2>
+            <input type="hidden" name="version">
+            <label>Original text <textarea name="originalText" required maxlength="1000" rows="2"></textarea></label>
+            <label>Translation <textarea name="translationText" maxlength="8000" rows="3"></textarea></label>
+            <label>Example <textarea name="instanceText" maxlength="4000" rows="3"></textarea></label>
+            <p id="review-edit-feedback" class="edit-feedback" role="alert"></p>
+            <div class="page-actions">
+                <button type="submit">Save changes</button>
+                <button type="button" id="cancel-review-edit" class="button-secondary">Cancel</button>
+            </div>
+        </form>
+    </dialog>
 
     <script th:src="@{/js/reviews.js}"></script>
 </section>

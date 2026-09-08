@@ -56,6 +56,22 @@ public final class ReviewTestFixtures {
         return attempt;
     }
 
+    public static ReviewCard versionedCard(User user, String originalText, long version) {
+        ReviewCard card = dueCard(user, originalText);
+        org.springframework.test.util.ReflectionTestUtils.setField(card, "version", version);
+        return card;
+    }
+
+    public static ReviewCard suspendedCard(User user, String originalText) {
+        ReviewCard card = dueCard(user, originalText);
+        card.setState(ReviewCardState.SUSPENDED);
+        return card;
+    }
+
+    public static List<ReviewAttempt> history(User user, ReviewCard card, ReviewAnswer... answers) {
+        return java.util.Arrays.stream(answers).map(answer -> attempt(user, card, answer)).toList();
+    }
+
     public static ExportRecord wordRecordWithExample() {
         return new ExportRecord(
                 "Run",

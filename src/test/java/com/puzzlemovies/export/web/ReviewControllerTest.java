@@ -49,6 +49,61 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class ReviewControllerTest {
     @Test
+    void contentPatchReturnsVersionedCardWithoutAnsweringOrAdvancingSession() throws Exception {
+        User user = ReviewTestFixtures.user("edit@example.com");
+        TestContext context = context(user);
+        var card = ReviewWebTestFixtures.editableCard(user, 5);
+        var cardView = new ReviewService(null, null, null).toView(card);
+        when(context.reviewService.updateContent(eq(user), eq(card.getId()), any()))
+                .thenReturn(new ReviewDtos.CardContentUpdateResponse(cardView));
+        var session = new org.springframework.mock.web.MockHttpSession();
+        session.setAttribute("reviewedCount", 7);
+        context.mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/cards/{id}", card.getId())
+                        .session(session).contentType("application/json").content(ReviewWebTestFixtures.contentUpdate(4)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.card.id").value(card.getId().toString()))
+                .andExpect(jsonPath("$.card.version").value(5));
+        assertEquals(7, session.getAttribute("reviewedCount"));
+        verify(context.reviewService).updateContent(user, card.getId(),
+                new ReviewDtos.CardContentUpdateRequest("Walk", "Walk home.", "идти", 4L));
+        org.mockito.Mockito.verifyNoMoreInteractions(context.reviewService);
+    }
+
+    @Test
+    void contentPatchMapsValidationOwnershipAndConcurrencyErrors() throws Exception {
+        var user = ReviewTestFixtures.user("edit@example.com");
+        var context = context(user);
+        var id = UUID.randomUUID();
+        var patch = org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/cards/{id}", id)
+                .contentType("application/json").content(ReviewWebTestFixtures.contentUpdate(0));
+        when(context.reviewService.updateContent(eq(user), eq(id), any()))
+                .thenThrow(new ReviewService.InvalidCardContentException("Original text is required"))
+                .thenThrow(new ReviewService.CardNotFoundException())
+                .thenThrow(new ReviewService.StaleCardException());
+        context.mvc.perform(patch).andExpect(status().isBadRequest());
+        context.mvc.perform(patch).andExpect(status().isNotFound());
+        context.mvc.perform(patch).andExpect(status().isConflict());
+        context(null).mvc.perform(patch).andExpect(status().isUnauthorized());
+        context.mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/cards/{id}", id)
+                .contentType("application/json").content("{malformed"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void libraryIsOwnerScopedAndAcceptsOnlyNonnegativePages() throws Exception {
+        User user = ReviewTestFixtures.user("library@example.com");
+        TestContext context = context(user);
+        var page = new org.springframework.data.domain.PageImpl<ReviewDtos.CardLibraryItem>(List.of());
+        when(context.reviewService.cardLibrary(user, 1)).thenReturn(page);
+        context.mvc.perform(get("/cards").param("page", "1"))
+                .andExpect(status().isOk()).andExpect(view().name("cards"))
+                .andExpect(model().attribute("library", page));
+        verify(context.reviewService).cardLibrary(user, 1);
+        context.mvc.perform(get("/cards").param("page", "-1")).andExpect(status().isBadRequest());
+        context.mvc.perform(get("/cards").param("page", "abc")).andExpect(status().isBadRequest());
+        context(null).mvc.perform(get("/cards")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void getReviewsRendersDueCardAndCounts() throws Exception {
         User user = ReviewTestFixtures.user("learner@example.com");
         TestContext context = context(user);
@@ -174,7 +229,7 @@ class ReviewControllerTest {
                         ReviewDtos.LookupActionType.INSTANCE_TRANSLATION,
                         "Translate sentence",
                         "https://translate.google.com/?text=A%20very%20long%20sentence",
-                        "A very long sentence")));
+                        "A very long sentence")), 0);
         ReviewDtos.ReviewQueueResponse queue = new ReviewDtos.ReviewQueueResponse(
                 card,
                 new ReviewDtos.ReviewCounts(0, 1, null));
@@ -244,7 +299,7 @@ class ReviewControllerTest {
                         "Arrival",
                         com.puzzlemovies.export.model.ReviewCardState.NEW,
                         Instant.now(),
-                        List.of()),
+                        List.of(), 0),
                 new ReviewDtos.ReviewCounts(0, 1, null));
     }
 
@@ -267,6 +322,7 @@ class ReviewControllerTest {
         viewResolver.setSuffix(".html");
         return new TestContext(
                 MockMvcBuilders.standaloneSetup(controller)
+                        .setControllerAdvice(new GlobalExceptionHandler())
                         .setViewResolvers(viewResolver)
                         .build(),
                 reviewService,

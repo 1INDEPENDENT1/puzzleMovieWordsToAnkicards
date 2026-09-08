@@ -31,4 +31,4 @@
 
 ## Notes
 
-- Validation completed on 2026-08-22. The scope is limited to an application-owned study-card library, derived performance data, and edits to learning content from the library and current study card.
+- Validation updated on 2026-09-04. The scope is limited to an application-owned study-card library, derived performance data, and edits to learning content from the library and current study card. Saved learner edits are marked as manual and protected from later source imports; success criteria do not use time limits.

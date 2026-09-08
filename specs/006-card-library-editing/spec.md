@@ -39,6 +39,7 @@ As a learner, I can edit a card from its table row, so I can correct an original
 2. **Given** the learner saves valid changes, **When** they return to the library, **Then** the row shows the saved content and the same card retains its existing review statistics.
 3. **Given** the learner cancels an edit, **When** they return to the table, **Then** the card remains unchanged.
 4. **Given** required card identity content would become blank or invalid, **When** the learner attempts to save it, **Then** the system explains the problem and preserves the last saved card.
+5. **Given** the learner has saved a card correction, **When** the same card is refreshed from a later source import, **Then** its manually edited original text, translation, and example remain unchanged.
 
 ---
 
@@ -85,6 +86,7 @@ As a learner, I can edit the current review card while studying, so I can immedi
 - **FR-013**: The system MUST prevent a learner from viewing or editing any other learner's cards or their statistics.
 - **FR-014**: The system MUST preserve existing export and in-app review flows while adding the card library and editing capabilities.
 - **FR-015**: The system MUST provide automated checks for library visibility, statistics calculation, learner isolation, edits from both entry points, cancellation or validation failures, and preservation of answer history and scheduling state.
+- **FR-016**: The system MUST mark a card when a learner saves an edit and MUST preserve its manually edited original text, translation, and example during later source imports.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -97,9 +99,9 @@ As a learner, I can edit the current review card while studying, so I can immedi
 
 ### Measurable Outcomes
 
-- **SC-001**: A learner with up to 100 cards can open the card library and find the original text, translation, example, and performance data for any card in under 30 seconds.
+- **SC-001**: A learner with up to 100 cards can reach any active card through the card library and inspect its original text, translation, example, and performance data.
 - **SC-002**: In a controlled set of cards with answer histories, 100% of displayed total, correct, incorrect, and correct-answer percentage values match the recorded answers.
-- **SC-003**: A learner can save a valid content correction from either the library or an active study card in under 60 seconds.
+- **SC-003**: A learner can save a valid content correction from either the library or an active study card and immediately see the saved content in that view.
 - **SC-004**: In automated editing checks, 100% of saved card edits leave the card's prior answer count, correct-answer percentage, and next review state unchanged.
 - **SC-005**: In access checks, 100% of requests to view or edit another learner's card are rejected and reveal no card content or statistics.
 - **SC-006**: Learners can complete their study session after editing a current card without an edit creating a duplicate answer or advancing the queue.
@@ -112,3 +114,4 @@ As a learner, I can edit the current review card while studying, so I can immedi
 - Optional translations and examples may remain blank; original text remains the required study target.
 - Existing sign-in identifies the learner and controls access to their own cards.
 - The table may use standard navigation appropriate to the number of cards, provided every card remains reachable and the requested data remains readable.
+- Saving a card edit marks its learner-editable content as manually customized. Later source imports must not overwrite that manually customized original text, translation, or example.

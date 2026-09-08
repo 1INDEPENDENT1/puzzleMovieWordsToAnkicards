@@ -14,6 +14,11 @@
 
     let revealedAt = null;
     let submitting = false;
+    let savingEdit = false;
+    const editor = document.getElementById('review-editor');
+    const editForm = document.getElementById('review-edit-form');
+    const editFeedback = document.getElementById('review-edit-feedback');
+    const cancelEdit = document.getElementById('cancel-review-edit');
 
     const setStatus = (message) => {
         if (status) {
@@ -76,10 +81,15 @@
 
         card.className = 'review-card';
         card.setAttribute('data-card-id', nextCard.id);
+        card.dataset.version = nextCard.version;
+        card.dataset.original = nextCard.originalText;
+        card.dataset.instance = nextCard.instanceText || '';
+        card.dataset.translation = nextCard.translationText || '';
         card.innerHTML = `
             <div class="review-content" id="review-content">
                 <div class="card-face card-front">
                     <span class="eyebrow"></span>
+                    <button type="button" class="button-secondary edit-current" data-edit-current>Edit card</button>
                     <h2 id="card-original"></h2>
                     <p class="instance" id="card-instance"></p>
                 </div>
@@ -111,6 +121,69 @@
         revealedAt = null;
     };
 
+    const saveEdit = async (event) => {
+        event.preventDefault();
+        if (savingEdit || submitting || !card.dataset.cardId) return;
+        if (!editForm.elements.originalText.value.trim()) {
+            editFeedback.textContent = 'Original text is required.';
+            editForm.elements.originalText.focus();
+            return;
+        }
+        const wasRevealed = !document.getElementById('card-back').hidden;
+        const previousRevealedAt = revealedAt;
+        savingEdit = true;
+        const saveButton = editForm.querySelector('[type="submit"]');
+        saveButton.disabled = cancelEdit.disabled = true;
+        editFeedback.textContent = 'Saving…';
+        try {
+            const response = await fetch(`/cards/${card.dataset.cardId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    originalText: editForm.elements.originalText.value,
+                    translationText: editForm.elements.translationText.value,
+                    instanceText: editForm.elements.instanceText.value,
+                    version: Number(editForm.elements.version.value)
+                })
+            });
+            if (response.status === 409) throw new Error('This card has changed. Reload the page before editing again.');
+            if (response.status === 400) throw new Error('Check the text lengths and enter a nonblank original text.');
+            if (response.status === 401) throw new Error('Sign in again before saving.');
+            if (response.status === 404) throw new Error('This card is no longer available. Reload the page.');
+            if (!response.ok) throw new Error('Changes were not saved. Try again.');
+            const payload = await response.json();
+            renderCard(payload.card);
+            document.getElementById('card-back').hidden = !wasRevealed;
+            revealedAt = previousRevealedAt;
+            revealButton.disabled = wasRevealed;
+            setAnswerEnabled(wasRevealed);
+            editor.close();
+            card.querySelector('[data-edit-current]').focus();
+            setStatus('Card saved. Continue studying this card.');
+        } catch (error) {
+            editFeedback.textContent = error.message || 'Changes were not saved. Try again.';
+        } finally {
+            savingEdit = false;
+            saveButton.disabled = cancelEdit.disabled = false;
+        }
+    };
+
+    card.addEventListener('click', event => {
+        if (!event.target.closest('[data-edit-current]') || submitting || savingEdit || !editor) return;
+        editForm.elements.version.value = card.dataset.version;
+        editForm.elements.originalText.value = card.dataset.original || '';
+        editForm.elements.translationText.value = card.dataset.translation || '';
+        editForm.elements.instanceText.value = card.dataset.instance || '';
+        editFeedback.textContent = '';
+        editor.showModal();
+        editForm.elements.originalText.focus();
+    });
+    if (editor && editForm) {
+        editForm.addEventListener('submit', saveEdit);
+        cancelEdit.addEventListener('click', () => { if (!savingEdit) editor.close(); });
+        editor.addEventListener('cancel', event => { if (savingEdit) event.preventDefault(); });
+    }
+
     const updateCounts = (counts) => {
         reviewedCount.textContent = counts.reviewedCount;
         remainingCount.textContent = counts.remainingDueCount;
@@ -118,7 +191,7 @@
     };
 
     const answer = async (button) => {
-        if (submitting || !card.dataset.cardId) {
+        if (submitting || savingEdit || (editor && editor.open) || !card.dataset.cardId) {
             return;
         }
         submitting = true;

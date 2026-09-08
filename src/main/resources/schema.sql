@@ -19,6 +19,8 @@ BEGIN
     ALTER TABLE review_cards ADD COLUMN IF NOT EXISTS record_kind varchar(32);
     ALTER TABLE review_cards ADD COLUMN IF NOT EXISTS review_count integer;
     ALTER TABLE review_cards ADD COLUMN IF NOT EXISTS lapse_count integer;
+    ALTER TABLE review_cards ADD COLUMN IF NOT EXISTS version bigint NOT NULL DEFAULT 0;
+    ALTER TABLE review_cards ADD COLUMN IF NOT EXISTS manual_content_override boolean NOT NULL DEFAULT false;
 
     SELECT EXISTS (
         SELECT 1 FROM information_schema.columns
@@ -30,6 +32,7 @@ BEGIN
             SET original_text = regexp_replace(front, '^(.+) \1( .*)?$', '\1'),
                 translation_text = regexp_replace(front, '^(.+) \1 ?(.*)$', '\2')
             WHERE front ~ '^(.+) \1( |$)'
+              AND NOT manual_content_override
               AND (translation_text IS NULL OR btrim(translation_text) = '')
         $migration$;
         EXECUTE $migration$

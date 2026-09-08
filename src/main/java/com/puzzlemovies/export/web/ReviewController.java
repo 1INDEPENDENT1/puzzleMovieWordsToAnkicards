@@ -13,16 +13,20 @@ import com.puzzlemovies.export.service.ReviewService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.UUID;
 
@@ -65,6 +69,17 @@ public class ReviewController {
             session.removeAttribute(IMPORT_MESSAGE);
         }
         return "reviews";
+    }
+
+    @GetMapping("/cards")
+    public String cards(@RequestParam(value = "page", defaultValue = "0") int page,
+                        HttpSession session, Model model) {
+        User user = currentUser(session);
+        if (page < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be nonnegative");
+        }
+        model.addAttribute("library", reviewService.cardLibrary(user, page));
+        return "cards";
     }
 
     @PostMapping("/reviews/cards")
@@ -116,6 +131,30 @@ public class ReviewController {
     @ExceptionHandler(ReviewService.InvalidAnswerException.class)
     ResponseEntity<String> invalidAnswer() {
         return ResponseEntity.badRequest().body("Invalid answer");
+    }
+
+    @PatchMapping("/cards/{id}")
+    @ResponseBody
+    public ReviewDtos.CardContentUpdateResponse updateContent(@PathVariable("id") UUID id,
+            @RequestBody ReviewDtos.CardContentUpdateRequest request, HttpSession session) {
+        return reviewService.updateContent(currentUser(session), id, request);
+    }
+
+    @ExceptionHandler(ReviewService.InvalidCardContentException.class)
+    ResponseEntity<String> invalidContent(ReviewService.InvalidCardContentException ex) {
+        return ResponseEntity.badRequest().body(ex.getMessage());
+    }
+
+    @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
+    ResponseEntity<String> malformedRequest() {
+        return ResponseEntity.badRequest().body("Invalid request. Check the submitted fields.");
+    }
+
+    @ExceptionHandler({ReviewService.StaleCardException.class,
+            OptimisticLockingFailureException.class})
+    ResponseEntity<String> staleCard() {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body("This card has changed. Reload the page before editing again.");
     }
 
     @ExceptionHandler(ReviewService.CardNotFoundException.class)

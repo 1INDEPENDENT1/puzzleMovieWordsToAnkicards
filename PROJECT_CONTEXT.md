@@ -18,7 +18,7 @@ The longer-term direction is to reduce dependence on external Anki templates by 
 
 ## Technology Stack
 
-- Java 17.
+- Java 21.
 - Spring Boot 3.2.5.
 - Spring MVC controllers and server-rendered Thymeleaf templates.
 - Spring Data JPA with Hibernate.

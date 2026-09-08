@@ -41,9 +41,11 @@ public class ReviewCardImportService {
                         return createdCard;
                     });
             boolean isNew = card.getId() == null;
-            card.setOriginalText(draft.originalText());
-            card.setInstanceText(draft.instanceText());
-            card.setTranslationText(draft.translationText());
+            if (!card.isManualContentOverride()) {
+                card.setOriginalText(draft.originalText());
+                card.setInstanceText(draft.instanceText());
+                card.setTranslationText(draft.translationText());
+            }
             card.setSourceContext(draft.sourceContext());
             card.setRecordKind(draft.recordKind());
             reviewCardRepository.save(card);

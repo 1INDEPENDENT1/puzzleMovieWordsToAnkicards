@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout :: layout(~{::title}, ~{::section})}">
+<head><title>Card library - PuzzleMovies Export</title></head>
+<section class="library-page">
+    <div class="review-header">
+        <div><h1>Card library</h1><p class="muted">Your vocabulary and recorded answers.</p></div>
+        <nav class="page-actions" aria-label="Study navigation">
+            <a class="button" href="/reviews">Study cards</a>
+            <a class="button button-secondary" href="/exports/menu">Exports</a>
+        </nav>
+    </div>
+    <div class="empty-state notice" th:if="${library.totalElements == 0}">
+        No cards yet. Create study cards from a completed export.
+    </div>
+    <p th:if="${library.empty && library.totalElements > 0}">No cards on this page. <a href="/cards">Go to the first page</a>.</p>
+    <p class="table-scroll-hint muted" th:unless="${library.empty}">Scroll horizontally to see all columns.</p>
+    <div class="library-scroll" role="region" aria-label="Vocabulary cards" tabindex="0" th:unless="${library.empty}">
+        <table class="library-table">
+            <caption><span th:text="${library.totalElements}">0</span> active cards. Correct answers are “I know” responses.</caption>
+            <thead><tr>
+                <th scope="col">Original</th><th scope="col">Translation</th><th scope="col">Example</th>
+                <th scope="col">Total</th><th scope="col">Correct</th><th scope="col">Incorrect</th><th scope="col">Correct %</th><th scope="col">Actions</th>
+            </tr></thead>
+            <tbody><tr th:each="item : ${library.content}" th:attr="data-card-id=${item.id()},data-version=${item.version()}">
+                <th scope="row" data-field="originalText" th:text="${item.originalText()}"></th>
+                <td data-field="translationText" th:attr="data-value=${item.translationText()}"
+                    th:text="${item.translationText() != null && !item.translationText().isBlank() ? item.translationText() : 'No translation saved'}"></td>
+                <td data-field="instanceText" th:attr="data-value=${item.instanceText()}"
+                    th:text="${item.instanceText() != null && !item.instanceText().isBlank() ? item.instanceText() : 'No example saved'}"></td>
+                <td th:text="${item.totalAnswers()}"></td><td th:text="${item.correctAnswers()}"></td><td th:text="${item.incorrectAnswers()}"></td>
+                <td th:text="${item.correctAnswerPercentage() == null ? 'No answers yet' : #numbers.formatDecimal(item.correctAnswerPercentage(), 1, 1) + '%'}"></td>
+                <td><button type="button" data-edit-card th:attr="aria-label=${'Edit ' + item.originalText()}">Edit</button></td>
+            </tr></tbody>
+        </table>
+    </div>
+    <nav class="pagination" aria-label="Card library pages" th:if="${library.totalPages > 1}">
+        <a class="button button-secondary" th:if="${library.hasPrevious()}" th:href="@{/cards(page=${library.number - 1})}">Previous</a>
+        <span th:text="${'Page ' + (library.number + 1) + ' of ' + library.totalPages}"></span>
+        <a class="button button-secondary" th:if="${library.hasNext()}" th:href="@{/cards(page=${library.number + 1})}">Next</a>
+    </nav>
+    <p id="library-status" role="status" aria-live="polite"></p>
+    <dialog id="card-editor" class="card-editor" aria-labelledby="editor-title">
+        <form id="card-edit-form" class="form">
+            <h2 id="editor-title">Edit card</h2>
+            <input type="hidden" name="version">
+            <label>Original text <textarea name="originalText" required maxlength="1000" rows="2"></textarea></label>
+            <label>Translation <textarea name="translationText" maxlength="8000" rows="3"></textarea></label>
+            <label>Example <textarea name="instanceText" maxlength="4000" rows="3"></textarea></label>
+            <p id="edit-feedback" class="edit-feedback" role="alert"></p>
+            <div class="page-actions">
+                <button type="submit">Save changes</button>
+                <button type="button" id="cancel-edit" class="button-secondary">Cancel</button>
+            </div>
+        </form>
+    </dialog>
+    <script th:src="@{/js/cards.js}"></script>
+</section>
+</html>
