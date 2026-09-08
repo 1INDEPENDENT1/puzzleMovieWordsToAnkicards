@@ -13,6 +13,34 @@
     --panel: #eef3f7;
 }
 
+.library-page { width: min(1400px, 100%); min-width: 0; display: grid; gap: 20px; }
+.page-actions, .pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.library-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.library-table { width: 100%; min-width: 900px; border-collapse: collapse; text-align: left; }
+.library-table caption { text-align: left; padding: 16px; color: var(--muted); }
+.library-table th, .library-table td { padding: 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.library-table thead { background: var(--panel); }
+.library-table [data-field] { min-width: 160px; max-width: 300px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+.pagination { justify-content: center; }
+.table-scroll-hint { display: none; }
+@media (max-width: 950px) {
+    .table-scroll-hint { display: block; margin: 0; }
+}
+.card-editor { width: min(600px, calc(100% - 32px)); max-height: 90vh; overflow-y: auto; padding: 24px; border: 1px solid var(--border); border-radius: 12px; color: var(--text); }
+.card-editor::backdrop { background: rgba(20, 35, 45, 0.5); }
+.card-editor h2 { margin: 0; }
+.card-editor textarea { width: 100%; min-width: 0; resize: vertical; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; line-height: 1.5; }
+.edit-feedback { margin: 0; color: var(--danger); overflow-wrap: anywhere; }
+.edit-feedback:empty { display: none; }
+.edit-current { float: right; margin: 0 0 12px 12px; }
+.card-front h2, .instance, .translation, .source { overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+    .card-editor { padding: 18px; }
+    .card-editor .page-actions > button { flex: 1; }
+    .edit-current { float: none; display: block; margin: 10px 0; }
+}
+:focus-visible { outline: 3px solid var(--accent-dark); outline-offset: 3px; }
+
 * {
     box-sizing: border-box;
 }

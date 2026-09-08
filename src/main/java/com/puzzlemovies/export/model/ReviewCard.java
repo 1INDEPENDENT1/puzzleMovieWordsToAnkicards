@@ -13,6 +13,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -24,6 +25,13 @@ import java.util.UUID;
         uniqueConstraints = @UniqueConstraint(name = "uk_review_cards_user_content_key",
                 columnNames = {"user_id", "content_key"}))
 public class ReviewCard {
+    @Version
+    @Column(nullable = false)
+    private long version;
+
+    @Column(nullable = false)
+    private boolean manualContentOverride;
+
     @Id
     private UUID id;
 
@@ -102,6 +110,23 @@ public class ReviewCard {
 
     public UUID getId() {
         return id;
+    }
+
+    public long getVersion() {
+        return version;
+    }
+
+    public boolean isManualContentOverride() {
+        return manualContentOverride;
+    }
+
+    public void setManualContentOverride(boolean manualContentOverride) {
+        this.manualContentOverride = manualContentOverride;
+    }
+
+    public void markContentCustomized() {
+        this.manualContentOverride = true;
+        this.updatedAt = Instant.now();
     }
 
     public void setId(UUID id) {

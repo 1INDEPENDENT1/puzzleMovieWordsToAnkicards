@@ -11,6 +11,14 @@ public final class ReviewDtos {
     private ReviewDtos() {
     }
 
+    public record CardLibraryItem(UUID id, long version, String originalText, String instanceText,
+                                  String translationText, long totalAnswers, long correctAnswers,
+                                  long incorrectAnswers) {
+        public Double correctAnswerPercentage() {
+            return totalAnswers == 0 ? null : 100.0 * correctAnswers / totalAnswers;
+        }
+    }
+
     public enum LookupActionType {
         DICTIONARY,
         PRONUNCIATION,
@@ -24,7 +32,15 @@ public final class ReviewDtos {
                                  String sourceContext,
                                  ReviewCardState state,
                                  Instant dueAt,
-                                 List<LookupAction> lookupActions) {
+                                 List<LookupAction> lookupActions,
+                                 long version) {
+    }
+
+    public record CardContentUpdateRequest(String originalText, String instanceText,
+                                           String translationText, Long version) {
+    }
+
+    public record CardContentUpdateResponse(ReviewCardView card) {
     }
 
     public record LookupAction(LookupActionType type, String label, String url, String sourceText) {

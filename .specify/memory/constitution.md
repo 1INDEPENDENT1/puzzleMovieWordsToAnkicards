@@ -1,19 +1,16 @@
 <!--
 Sync Impact Report
-Version change: none -> 1.0.0
-Modified principles: initial constitution
-Added sections: Core Principles, Project Constraints, Development Workflow, Governance
+Version change: 1.0.0 -> 2.0.0
+Modified principles: none
+Modified project constraints: Java baseline changed from Java 17 to Java 21
+Added sections: none
 Removed sections: none
-Templates requiring updates:
-- .specify/templates/constitution-template.md: checked, no update required
-- .specify/templates/plan-template.md: not present in this checkout
-- .specify/templates/spec-template.md: not present in this checkout
-- .specify/templates/tasks-template.md: not present in this checkout
-- .specify/templates/commands/*.md: not present in this checkout
+Templates requiring updates: none; templates resolve this constitution at runtime
 Runtime guidance checked:
-- PROJECT_CONTEXT.md: checked, aligned
-- AGENTS.md: updated to point agents to the constitution and project context
-Follow-up TODOs: none
+- PROJECT_CONTEXT.md and AGENTS.md still state Java 17 and require a separate
+  documentation update.
+Follow-up TODOs:
+- Update project guidance to Java 21 outside this constitution workflow.
 -->
 # PuzzleMovies Vocabulary Study App Constitution
 
@@ -67,7 +64,7 @@ preservation are core product requirements.
 
 ## Project Constraints
 
-- Java 17, Spring Boot 3.2.x, Spring MVC, Thymeleaf, Spring Data JPA, PostgreSQL,
+- Java 21, Spring Boot 3.2.x, Spring MVC, Thymeleaf, Spring Data JPA, PostgreSQL,
   Java `HttpClient`, Jsoup, and `org.drugov:lingua-core` are the current baseline.
 - PostgreSQL is the required persistent database. H2 and in-memory database substitutes
   MUST NOT become the application runtime path.
@@ -114,4 +111,4 @@ Compliance review is required before completing substantial implementation work:
 agents MUST confirm that the change stays within task boundaries, respects current
 architecture, protects credentials and vocabulary data, and has appropriate validation.
 
-**Version**: 1.0.0 | **Ratified**: 2026-07-15 | **Last Amended**: 2026-07-15
+**Version**: 2.0.0 | **Ratified**: 2026-07-15 | **Last Amended**: 2026-09-04
