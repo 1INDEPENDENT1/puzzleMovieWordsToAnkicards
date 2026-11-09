@@ -18,3 +18,4 @@ Thumbs.db
 exports/
 # IntelliJ IDEA
 *.iml
+/secrets.txt

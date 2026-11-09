@@ -151,6 +151,36 @@ class ReviewCardRepositoryTest {
     }
 
     @Test
+    void repeatImportOfAcceptedDraftsPreservesPersistedHistoryAndManualSchedule() {
+        var user = ReviewTestFixtures.user("import-history@example.invalid");
+        em.persist(user);
+        var expected = com.puzzlemovies.export.support.DictionaryFixtureLoader.expectations("phrases-expected.json").get(0);
+        var draft = new com.puzzlemovies.export.review.ReviewCardDraft(expected.original(), null,
+                expected.translation(), expected.movieTitle(), com.puzzlemovies.export.export.ExportRecord.RecordKind.PHRASE);
+        var importer = new com.puzzlemovies.export.service.ReviewCardImportService(cards);
+        assertEquals(1, importer.importDrafts(user, java.util.List.of(draft)).created());
+        var key = importer.contentKey(draft);
+        var card = cards.findByUserAndContentKey(user, key).orElseThrow();
+        var id = card.getId();
+        var due = java.time.Instant.parse("2027-01-02T03:04:05Z");
+        card.setDueAt(due); card.setIntervalDays(17); card.setReviewCount(9);
+        card.setManualContentOverride(true); card.setOriginalText("My correction");
+        var attempt = ReviewTestFixtures.attempt(user, card, ReviewAnswer.KNOWN);
+        em.persist(attempt); em.flush(); em.clear();
+        assertEquals(0, importer.importDrafts(user, java.util.List.of(draft)).created());
+        assertEquals(0, importer.importDrafts(user, java.util.List.of(draft)).created());
+        em.flush(); em.clear();
+        var saved = cards.findByUserAndContentKey(user, key).orElseThrow();
+        assertEquals(id, saved.getId()); assertEquals(key, saved.getContentKey());
+        assertEquals(due, saved.getDueAt()); assertEquals(17, saved.getIntervalDays());
+        assertEquals(9, saved.getReviewCount()); assertTrue(saved.isManualContentOverride());
+        assertEquals("My correction", saved.getOriginalText());
+        var history = attempts.findByReviewCardAndUserOrderByReviewedAtAsc(saved, user);
+        assertEquals(1, history.size()); assertEquals(attempt.getId(), history.get(0).getId());
+        assertEquals(ReviewAnswer.KNOWN, history.get(0).getAnswer());
+    }
+
+    @Test
     void reviewCardHasOwnerScopedDuplicateConstraint() {
         Table table = ReviewCard.class.getAnnotation(Table.class);
 

@@ -8,10 +8,10 @@
     <h1>Export progress</h1>
     <p class="muted">Track export status and progress.</p>
 
-    <div class="progress-panel" data-job-id="" th:attr="data-job-id=${job.id}">
+    <div class="progress-panel" data-job-id="" th:attr="data-job-id=${job.id},data-warning-presented=${warningPresented}">
         <div class="status-line">
             <span>Status:</span>
-            <strong id="status-text" th:text="${job.status}"></strong>
+            <strong id="status-text" th:text="${completion.completeness != null and completion.completeness.name() == 'PARTIAL' ? 'COMPLETED (partial export)' : job.status}"></strong>
         </div>
         <div class="status-line">
             <span>Phase:</span>
@@ -26,14 +26,23 @@
         <div class="progress-meta">
             Rows: <span id="row-count" th:text="${job.rowCount != null ? job.rowCount : 0}"></span>
         </div>
-        <div class="error" id="error-text" th:if="${job.errorMessage}" th:text="${job.errorMessage}"></div>
-        <div class="download" id="download-link" style="display:none;">
+        <div class="error" id="error-text" role="alert" th:text="${completion.errorMessage}"
+             th:style="${completion.errorMessage != null} ? '' : 'display:none;'"></div>
+        <div class="warning" id="warning-text" role="status" aria-live="polite"
+             th:style="${completion.warningMessage != null} ? '' : 'display:none;'">
+            <span id="warning-message" th:text="${completion.warningMessage}"></span>
+            <span>Unparsed source records: <strong id="unparsed-count" th:text="${completion.unparsedRecordCount}"></strong>.</span>
+        </div>
+        <p id="review-unavailable" class="muted"
+           th:style="${completion.completeness != null and !completion.reviewCreationAvailable} ? '' : 'display:none;'">Generated review records are no longer available; run a fresh export to create review cards.</p>
+        <div class="download" id="download-link"
+             th:style="${completion.downloadAvailable} ? '' : 'display:none;'">
             <a th:href="@{'/exports/' + ${job.id} + '/download'}">Download TSV</a>
         </div>
         <form class="review-create" id="review-create"
               method="post"
               action="/reviews/cards"
-              th:style="${job.status.name() == 'COMPLETED'} ? '' : 'display:none;'">
+              th:style="${completion.reviewCreationAvailable} ? '' : 'display:none;'">
             <input type="hidden" name="sourceExportId" th:value="${job.id}">
             <button type="submit">Create review cards</button>
         </form>

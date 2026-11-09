@@ -1,8 +1,6 @@
 (() => {
     const panel = document.querySelector('.progress-panel');
-    if (!panel) {
-        return;
-    }
+    if (!panel) return;
     const jobId = panel.getAttribute('data-job-id');
     const statusText = document.getElementById('status-text');
     const phaseText = document.getElementById('phase-text');
@@ -10,43 +8,58 @@
     const progressPercent = document.getElementById('progress-percent');
     const rowCount = document.getElementById('row-count');
     const errorText = document.getElementById('error-text');
+    const warningText = document.getElementById('warning-text');
+    const warningMessage = document.getElementById('warning-message');
+    const unparsedCount = document.getElementById('unparsed-count');
     const downloadLink = document.getElementById('download-link');
     const reviewCreate = document.getElementById('review-create');
+    const reviewUnavailable = document.getElementById('review-unavailable');
+    let stopped = false;
+    let timer;
+    let redirecting = false;
 
+    const show = (node, visible) => { if (node) node.style.display = visible ? '' : 'none'; };
     const update = (payload) => {
-        statusText.textContent = payload.status;
+        const partial = payload.completeness === 'PARTIAL';
+        statusText.textContent = partial ? 'COMPLETED (partial export)' : payload.status;
         phaseText.textContent = payload.phase;
         progressFill.style.width = `${payload.progressPercent}%`;
         progressPercent.textContent = payload.progressPercent;
         rowCount.textContent = payload.rowCount ?? 0;
-        if (payload.errorMessage) {
-            errorText.textContent = payload.errorMessage;
-            errorText.style.display = 'block';
-        }
-        if (payload.status === 'COMPLETED') {
-            downloadLink.style.display = 'block';
-            if (reviewCreate) {
-                reviewCreate.style.display = 'block';
-            }
+        errorText.textContent = payload.errorMessage ?? '';
+        show(errorText, !!payload.errorMessage);
+        warningMessage.textContent = payload.warningMessage ?? '';
+        unparsedCount.textContent = payload.unparsedRecordCount ?? 0;
+        show(warningText, partial);
+        // Only server rendering registers presentation in the session. Polling never does.
+        const presented = panel.getAttribute('data-warning-presented') === 'true';
+        show(downloadLink, payload.downloadAvailable && (!partial || presented));
+        show(reviewCreate, payload.reviewCreationAvailable && (!partial || presented));
+        show(reviewUnavailable, !!payload.completeness && !payload.reviewCreationAvailable);
+        if (partial && !presented && !redirecting) {
+            redirecting = true;
+            window.location.replace(`/exports/${jobId}`);
         }
     };
 
     const poll = async () => {
+        if (stopped) return;
         try {
             const response = await fetch(`/exports/${jobId}/status`, { cache: 'no-store' });
-            if (!response.ok) {
-                return;
-            }
+            if (!response.ok) { stopped = true; return; }
             const payload = await response.json();
             update(payload);
-            if (payload.status === 'COMPLETED' || payload.status === 'FAILED') {
-                clearInterval(intervalId);
-            }
+            stopped = payload.status === 'COMPLETED' || payload.status === 'FAILED';
         } catch (err) {
-            // ignore transient polling errors
+            // Retry transient polling errors while the export is active.
         }
+        if (!stopped && !redirecting) timer = setTimeout(poll, 2000);
     };
 
-    poll();
-    const intervalId = setInterval(poll, 2000);
+    if (statusText.textContent.trim().startsWith('COMPLETED') || statusText.textContent.trim() === 'FAILED') {
+        stopped = true;
+    } else {
+        poll();
+    }
+    window.addEventListener('pagehide', () => { stopped = true; clearTimeout(timer); });
 })();

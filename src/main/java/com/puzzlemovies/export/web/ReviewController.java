@@ -83,7 +83,7 @@ public class ReviewController {
     }
 
     @PostMapping("/reviews/cards")
-    public String createCards(@RequestParam(value = "sourceExportId", required = false) UUID sourceExportId,
+    public Object createCards(@RequestParam(value = "sourceExportId", required = false) UUID sourceExportId,
                               HttpSession session) {
         User user = currentUser(session);
         if (sourceExportId == null) {
@@ -91,8 +91,13 @@ public class ReviewController {
         }
         ExportJob job = exportJobRepository.findByIdAndUser(sourceExportId, user)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (job.getStatus() != ExportStatus.COMPLETED) {
+        ExportCompletionProjection projection = ExportCompletionProjection.from(job);
+        if (projection.completion() == null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Export is not completed");
+        }
+        if (projection.partial() && !ExportWarningPresentation.wasPresented(session, job)) {
+            return ResponseEntity.status(HttpStatus.SEE_OTHER)
+                    .header(org.springframework.http.HttpHeaders.LOCATION, "/exports/" + job.getId()).build();
         }
         ReviewExportSource source = exportService.generatedReviewSourceForCompletedExport(user, sourceExportId)
                 .orElseThrow(() -> new ResponseStatusException(

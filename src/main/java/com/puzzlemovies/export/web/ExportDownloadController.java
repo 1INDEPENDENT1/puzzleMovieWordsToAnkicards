@@ -37,13 +37,18 @@ public class ExportDownloadController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         ExportJob job = exportJobRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (job.getStatus() != ExportStatus.COMPLETED || job.getOutputFilePath() == null) {
+        ExportCompletionProjection projection = ExportCompletionProjection.from(job);
+        if (!projection.downloadAvailable()) {
             ModelAndView modelAndView = new ModelAndView("export-not-ready");
             modelAndView.setStatus(HttpStatus.CONFLICT);
             modelAndView.addObject("job", job);
             return modelAndView;
         }
 
+        if (projection.partial() && !ExportWarningPresentation.wasPresented(session, job)) {
+            return ResponseEntity.status(HttpStatus.SEE_OTHER)
+                    .header(HttpHeaders.LOCATION, "/exports/" + job.getId()).build();
+        }
         Path path = Path.of(job.getOutputFilePath());
         Resource resource = new FileSystemResource(path);
         return ResponseEntity.ok()

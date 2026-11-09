@@ -1,166 +1,104 @@
 package com.puzzlemovies.export.puzzlemovies;
 
 import com.puzzlemovies.export.config.ExportProperties;
+import com.puzzlemovies.export.support.DictionaryHttpTestClient;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
 import org.junit.jupiter.api.Test;
 
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLParameters;
-import javax.net.ssl.SSLSession;
-import java.io.IOException;
-import java.net.Authenticator;
-import java.net.CookieHandler;
-import java.net.ProxySelector;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpHeaders;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static com.puzzlemovies.export.support.DictionaryFixtureLoader.html;
+import static org.junit.jupiter.api.Assertions.*;
 
 class PuzzleMoviesDictionaryClientTest {
     @Test
-    void sendsCompleteCookieHeaderWhenFetchingWords() throws Exception {
-        CapturingHttpClient httpClient = new CapturingHttpClient(200, """
-                <html><body><table><tr><td>hello</td><td>translation</td></tr></table></body></html>
-                """);
-        PuzzleMoviesDictionaryClient client = new PuzzleMoviesDictionaryClient(httpClient, properties());
-        String cookieHeader = "PHPSESSID=session; guest_id=guest; wp_logged_in_cookie=logged; wp_auth_cookie=auth";
-
-        List<String> pages = client.fetchWordPages(cookieHeader);
-
-        assertEquals(1, pages.size());
-        assertEquals(cookieHeader, httpClient.lastRequest.headers().firstValue("Cookie").orElseThrow());
+    void fetchesEveryDerivedWordPageInOrderAndStopsAtTerminal() throws Exception {
+        DictionaryHttpTestClient transport = sequence("word");
+        var pages = client(transport).fetchWordPages("test-cookie");
+        assertEquals(3, pages.size());
+        assertEquals(List.of(
+                URI.create("https://puzzle-movies.com/dictionary?item=word&noredirect=&page=1"),
+                URI.create("https://puzzle-movies.com/dictionary?item=word&noredirect=&page=2"),
+                URI.create("https://puzzle-movies.com/dictionary?item=word&noredirect=&page=3")), transport.requestedUris());
+        assertEquals(0, transport.remainingResponses());
     }
 
     @Test
-    void rejectsAnonymousHtmlReturnedWithOkStatus() {
-        CapturingHttpClient httpClient = new CapturingHttpClient(200, """
-                <div class="movies-header__user movies-header__user-anon">
-                    <a href="javascript:void(0)" onclick="show_sign_popup();">
-                        <div class="movies-header__user-enter"><span>Sign in</span></div>
-                    </a>
-                </div>
-                """);
-        PuzzleMoviesDictionaryClient client = new PuzzleMoviesDictionaryClient(httpClient, properties());
-
-        assertThrows(PuzzleMoviesSessionExpiredException.class,
-                () -> client.fetchPhrasePages("wp_logged_in_cookie=stale"));
+    void explicitlySelectsPhrasesForEveryPage() throws Exception {
+        DictionaryHttpTestClient transport = sequence("phrase");
+        assertEquals(3, client(transport).fetchPhrasePages("test-cookie").size());
+        assertEquals("item=phrase&noredirect=&page=3", transport.requestedUris().get(2).getRawQuery());
     }
 
-    private ExportProperties properties() {
+    @Test
+    void traversesFiftyOnePagesWithoutSilentTruncation() throws Exception {
+        DictionaryHttpTestClient transport = new DictionaryHttpTestClient();
+        for (int page = 1; page <= 51; page++) transport.enqueue(200, syntheticPage(page, 51, page < 51 ? page + 1 : null));
+        assertEquals(51, client(transport).fetchWordPages("test-cookie").size());
+        assertEquals(51, transport.requestCount());
+        assertEquals(0, transport.remainingResponses());
+    }
+
+    @Test
+    void acceptsApprovedSyntheticEmptyShellWithoutAnotherRequest() throws Exception {
+        DictionaryHttpTestClient transport = new DictionaryHttpTestClient().enqueue(200, html("edge-cases/word-zero-derived.html"));
+        assertEquals(1, client(transport).fetchWordPages("test-cookie").size());
+        assertEquals(1, transport.requestCount());
+    }
+
+    @Test void stableUnderstatedCounterDoesNotStopStructuralContinuation() throws Exception {
+        for (int total : List.of(0, 1)) {
+            var transport = new DictionaryHttpTestClient().enqueue(200, syntheticPage(1, total, 2))
+                    .enqueue(200, syntheticPage(2, total, null));
+            assertEquals(2, client(transport).fetchWordPages("FAKE_TEST_ONLY").size());
+            assertEquals(2, transport.requestCount());
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void preservesCompleteCookieHeaderOnAuthenticatedRequest() throws Exception {
+        var transport = org.mockito.Mockito.mock(java.net.http.HttpClient.class);
+        var response = org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
+        org.mockito.Mockito.when(response.statusCode()).thenReturn(200);
+        org.mockito.Mockito.when(response.body()).thenReturn(html("edge-cases/word-zero-derived.html"));
+        org.mockito.Mockito.when(response.uri()).thenReturn(URI.create("https://puzzle-movies.com/dictionary?item=word&noredirect=&page=1"));
+        String cookie = "TEST_SESSION=one; TEST_SECOND=two";
+        org.mockito.Mockito.when(transport.send(org.mockito.ArgumentMatchers.any(java.net.http.HttpRequest.class),
+                org.mockito.ArgumentMatchers.<java.net.http.HttpResponse.BodyHandler<String>>any())).thenAnswer(call -> {
+            java.net.http.HttpRequest request = call.getArgument(0);
+            assertEquals(cookie, request.headers().firstValue("Cookie").orElseThrow());
+            return response;
+        });
         ExportProperties properties = new ExportProperties();
         properties.getPuzzleMovies().setBaseUrl("https://puzzle-movies.com");
-        return properties;
+        assertEquals(1, new PuzzleMoviesDictionaryClient(transport, properties).fetchWordPages(cookie).size());
     }
 
-    private static final class CapturingHttpClient extends HttpClient {
-        private final int statusCode;
-        private final String body;
-        private HttpRequest lastRequest;
-
-        private CapturingHttpClient(int statusCode, String body) {
-            this.statusCode = statusCode;
-            this.body = body;
-        }
-
-        @Override
-        public Optional<CookieHandler> cookieHandler() {
-            return Optional.empty();
-        }
-
-        @Override
-        public Optional<Duration> connectTimeout() {
-            return Optional.empty();
-        }
-
-        @Override
-        public Redirect followRedirects() {
-            return Redirect.NORMAL;
-        }
-
-        @Override
-        public Optional<ProxySelector> proxy() {
-            return Optional.empty();
-        }
-
-        @Override
-        public SSLContext sslContext() {
-            return null;
-        }
-
-        @Override
-        public SSLParameters sslParameters() {
-            return new SSLParameters();
-        }
-
-        @Override
-        public Optional<Authenticator> authenticator() {
-            return Optional.empty();
-        }
-
-        @Override
-        public Version version() {
-            return Version.HTTP_1_1;
-        }
-
-        @Override
-        public Optional<Executor> executor() {
-            return Optional.empty();
-        }
-
-        @Override
-        public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler)
-                throws IOException, InterruptedException {
-            this.lastRequest = request;
-            return new StubHttpResponse<>((T) body, statusCode, request);
-        }
-
-        @Override
-        public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
-                                                                HttpResponse.BodyHandler<T> responseBodyHandler) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
-                                                                HttpResponse.BodyHandler<T> responseBodyHandler,
-                                                                HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
-            throw new UnsupportedOperationException();
-        }
+    static DictionaryHttpTestClient sequence(String section) {
+        DictionaryHttpTestClient transport = new DictionaryHttpTestClient();
+        for (int page = 1; page <= 3; page++) transport.enqueue(200, html("pages/" + section + "-derived-page-" + page + ".html"));
+        return transport;
     }
 
-    private record StubHttpResponse<T>(T body, int statusCode, HttpRequest request) implements HttpResponse<T> {
-        @Override
-        public HttpHeaders headers() {
-            return HttpHeaders.of(Map.of(), (name, value) -> true);
-        }
+    /** Explicit synthetic boundary based on the sanitized observed shell, never a claimed live page. */
+    static String syntheticPage(int page, int total, Integer next) {
+        Document doc = Jsoup.parse(html("pages/word-derived-page-1.html"));
+        doc.select(".movies-tabs__item.is-active span").first().text(Integer.toString(total));
+        var rows = doc.select("table.dict__video__list-table tr.dict__video__list-table__row");
+        rows.get(1).remove();
+        var list = doc.selectFirst(".paginator-style-2__list");
+        list.empty().append("<li class='paginator-style-2__element is-current'>" + page + "</li>");
+        if (page > 1) list.append("<li class='paginator-style-2__element'><a href='/dictionary?page=" + (page-1) + "'>Previous</a></li>");
+        if (next != null) list.append("<li class='paginator-style-2__element paginator-style-2__right'><a href='/dictionary?page=" + next + "'>Next</a></li>");
+        return doc.outerHtml();
+    }
 
-        @Override
-        public Optional<HttpResponse<T>> previousResponse() {
-            return Optional.empty();
-        }
-
-        @Override
-        public Optional<SSLSession> sslSession() {
-            return Optional.empty();
-        }
-
-        @Override
-        public URI uri() {
-            return request.uri();
-        }
-
-        @Override
-        public HttpClient.Version version() {
-            return HttpClient.Version.HTTP_1_1;
-        }
+    static PuzzleMoviesDictionaryClient client(DictionaryHttpTestClient transport) {
+        ExportProperties properties = new ExportProperties();
+        properties.getPuzzleMovies().setBaseUrl("https://puzzle-movies.com");
+        return new PuzzleMoviesDictionaryClient(transport, properties);
     }
 }

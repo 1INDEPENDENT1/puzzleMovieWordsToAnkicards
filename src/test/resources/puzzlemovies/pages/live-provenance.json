@@ -1,0 +1,40 @@
+{
+  "pages" : [ {
+    "sourceUri" : "https://puzzle-movies.com/dictionary?item=word&noredirect=&page=2",
+    "sourceTotal" : 1489,
+    "rows" : 36,
+    "page" : 2,
+    "section" : "word",
+    "httpStatus" : 200
+  }, {
+    "sourceUri" : "https://puzzle-movies.com/dictionary?item=word&noredirect=&page=42",
+    "sourceTotal" : 1489,
+    "rows" : 13,
+    "page" : 42,
+    "section" : "word",
+    "httpStatus" : 200
+  }, {
+    "sourceUri" : "https://puzzle-movies.com/dictionary?item=phrase&noredirect=&page=2",
+    "sourceTotal" : 766,
+    "rows" : 35,
+    "page" : 2,
+    "section" : "phrase",
+    "httpStatus" : 200
+  }, {
+    "sourceUri" : "https://puzzle-movies.com/dictionary?item=phrase&noredirect=&page=22",
+    "sourceTotal" : 766,
+    "rows" : 10,
+    "page" : 22,
+    "section" : "phrase",
+    "httpStatus" : 200
+  }, {
+    "sourceUri" : "https://puzzle-movies.com/dictionary?item=phrase&noredirect=&page=23",
+    "sourceTotal" : 766,
+    "rows" : 0,
+    "page" : 23,
+    "section" : "phrase",
+    "httpStatus" : 200
+  } ],
+  "observedDate" : "2026-11-09",
+  "method" : "Read-only Java HttpClient authenticated GET; credentials and full responses memory only; dictionary-only sanitized shell persisted"
+}

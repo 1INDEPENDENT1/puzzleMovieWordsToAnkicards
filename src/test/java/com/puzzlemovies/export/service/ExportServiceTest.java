@@ -42,6 +42,67 @@ class ExportServiceTest {
     Path tempDir;
 
     @Test
+    void stableSourceCounterMismatchWarnsSeparatelyFromParseRejections() throws Exception {
+        var c = context(ExportType.COMBINED);
+        var page = ExportTestFixtures.wordPages().getFirst();
+        var mismatched = new com.puzzlemovies.export.puzzlemovies.DictionaryPage(page.section(), 1, page.sourceUri(), page.html(),
+                new com.puzzlemovies.export.puzzlemovies.DictionaryPage.PageInspection(page.section(), 13, 1, null, 3, true, true));
+        when(c.dictionaryClient.fetchWordPages(anyString())).thenReturn(java.util.List.of(mismatched));
+        when(c.dictionaryClient.fetchPhrasePages(anyString())).thenReturn(ExportTestFixtures.phrasePages());
+        c.service.runExportAsync(c.job.getId(), ExportType.COMBINED, "FAKE_TEST_ONLY");
+        assertEquals(ExportStatus.COMPLETED, c.job.getStatus());
+        var completion = ExportCompletionMetadataCodec.decode(c.job);
+        assertEquals(ExportCompletionInfo.Completeness.PARTIAL, completion.completeness());
+        assertEquals(0, completion.unparsedRecordCount());
+        assertEquals(java.util.List.of(new com.puzzlemovies.export.puzzlemovies.SourceCountDiscrepancy(page.section(), 13, 3)),
+                completion.sourceCountDiscrepancies());
+        assertEquals(5, c.job.getRowCount());
+        assertTrue(c.service.generatedReviewSourceForCompletedExport(c.user, c.job.getId()).isPresent());
+    }
+
+    @Test
+    void realSourceFixturesRespectAllModesAndKeepTwoColumnOutput() throws Exception {
+        var words = java.util.List.of(ExportTestFixtures.page(
+                com.puzzlemovies.export.puzzlemovies.DictionarySection.WORD,
+                com.puzzlemovies.export.support.DictionaryFixtureLoader.html("words-real.html"), 36));
+        var phrases = java.util.List.of(ExportTestFixtures.page(
+                com.puzzlemovies.export.puzzlemovies.DictionarySection.PHRASE,
+                com.puzzlemovies.export.support.DictionaryFixtureLoader.html("phrases-real.html"), 36));
+        var phraseExpectations = com.puzzlemovies.export.support.DictionaryFixtureLoader.expectations("phrases-expected.json");
+        for (ExportType type : ExportType.values()) {
+            var c = context(type);
+            if (type != ExportType.PHRASES) when(c.dictionaryClient.fetchWordPages(anyString())).thenReturn(words);
+            when(c.dictionaryClient.fetchPhrasePages(anyString())).thenReturn(phrases);
+            c.service.runExportAsync(c.job.getId(), type, "FAKE_TEST_ONLY");
+            assertEquals(ExportStatus.COMPLETED, c.job.getStatus(), type.name());
+            assertEquals(ExportCompletionInfo.full(), ExportCompletionMetadataCodec.decode(c.job));
+            var records = c.service.generatedRecordsForCompletedExport(c.user, c.job.getId()).orElseThrow();
+            var source = c.service.generatedReviewSourceForCompletedExport(c.user, c.job.getId()).orElseThrow();
+            assertEquals(36, source.examples().size());
+            assertEquals(phraseExpectations.get(0).original(), source.examples().get(0).sourceText());
+            String output = Files.readString(Path.of(c.job.getOutputFilePath()));
+            assertEquals(records.size(), output.lines().count());
+            assertTrue(output.lines().allMatch(line -> line.split("\t", -1).length == 2));
+            if (type == ExportType.WORDS) {
+                assertTrue(records.stream().allMatch(r -> r.recordKind() == com.puzzlemovies.export.export.ExportRecord.RecordKind.WORD));
+                assertEquals("to mince", records.get(0).front());
+                assertTrue(records.get(0).back().contains("смягчать"));
+            } else {
+                assertEquals(36, records.stream().filter(r -> r.recordKind() == com.puzzlemovies.export.export.ExportRecord.RecordKind.PHRASE).count());
+                assertTrue(records.stream().anyMatch(r -> r.front().equals("Man, heck of a win!")));
+            }
+            if (type == ExportType.PHRASES) {
+                verify(c.dictionaryClient, never()).fetchWordPages(anyString());
+                assertTrue(source.words().isEmpty());
+            } else {
+                assertEquals("to mince", source.words().get(0).sourceText());
+                verify(c.dictionaryClient).fetchWordPages(anyString());
+            }
+            verify(c.dictionaryClient).fetchPhrasePages(anyString());
+        }
+    }
+
+    @Test
     void combinedExportWritesWordAndPhraseRowsWithPhaseAndRowCount() throws Exception {
         TestContext context = context(ExportType.COMBINED);
         when(context.dictionaryClient.fetchWordPages(anyString())).thenReturn(ExportTestFixtures.wordPages());
@@ -108,8 +169,8 @@ class ExportServiceTest {
         assertEquals(ExportStatus.FAILED, context.job.getStatus());
         assertEquals(ExportPhase.FAILED, context.job.getPhase());
         assertEquals(100, context.job.getProgressPercent());
-        assertEquals("Puzzle-Movies session expired or returned an anonymous page. Please sign in again.",
-                context.job.getErrorMessage());
+        assertTrue(context.job.getErrorMessage().contains("AUTHENTICATION"));
+        assertTrue(context.job.getErrorMessage().contains("section=WORD, page=1"));
         assertNotNull(context.job.getCompletedAt());
         verify(context.exportJobRepository, atLeastOnce()).save(context.job);
     }
@@ -118,13 +179,13 @@ class ExportServiceTest {
     void mixedFiftyItemExportRetainsEveryStructuredReviewContextWithoutChangingTsvRows() throws Exception {
         TestContext context = context(ExportType.COMBINED);
         String wordRows = IntStream.range(0, 50)
-                .mapToObj(index -> "<tr><td>word" + index + "</td><td>translation" + index + "</td></tr>")
+                .mapToObj(index -> ExportTestFixtures.wordRow("word" + index, "translation" + index))
                 .collect(java.util.stream.Collectors.joining());
         String phraseRows = IntStream.range(0, 50)
-                .mapToObj(index -> "<tr><td>word" + index + " example</td><td>example translation" + index + "</td></tr>")
+                .mapToObj(index -> ExportTestFixtures.phraseRow("word" + index + " example", "example translation" + index, ""))
                 .collect(java.util.stream.Collectors.joining());
-        when(context.dictionaryClient.fetchWordPages(anyString())).thenReturn(java.util.List.of("<table>" + wordRows + "</table>"));
-        when(context.dictionaryClient.fetchPhrasePages(anyString())).thenReturn(java.util.List.of("<table>" + phraseRows + "</table>"));
+        when(context.dictionaryClient.fetchWordPages(anyString())).thenReturn(java.util.List.of(ExportTestFixtures.page(com.puzzlemovies.export.puzzlemovies.DictionarySection.WORD, "<table class='dict__video__list-table'>" + wordRows + "</table>", 50)));
+        when(context.dictionaryClient.fetchPhrasePages(anyString())).thenReturn(java.util.List.of(ExportTestFixtures.page(com.puzzlemovies.export.puzzlemovies.DictionarySection.PHRASE, "<table class='dict__video__list-table'>" + phraseRows + "</table>", 50)));
 
         context.service.runExportAsync(context.job.getId(), ExportType.COMBINED, "cookie=value");
 
