@@ -1,0 +1,82 @@
+{
+  "date": "2026-11-09",
+  "database": "isolated temporary PostgreSQL",
+  "applicationCodeChanged": false,
+  "steps": [
+    {
+      "stage": "temporary_database_ready",
+      "port": 55437
+    },
+    {
+      "stage": "application_ready",
+      "port": 18080,
+      "legacySqlInitialization": "disabled"
+    },
+    {
+      "stage": "login",
+      "http": 200,
+      "authenticated": true
+    },
+    {
+      "stage": "export_started",
+      "type": "COMBINED"
+    },
+    {
+      "stage": "export_completed",
+      "rowCount": 1220,
+      "phase": "COMPLETED",
+      "completeness": "PARTIAL",
+      "unparsedRecordCount": 0,
+      "sourceCountDiscrepancies": [
+        {
+          "section": "PHRASE",
+          "declaredTotal": 766,
+          "retrievedTotal": 756
+        }
+      ]
+    },
+    {
+      "stage": "partial_warning_presented",
+      "counterDiscrepancy": true,
+      "rejectedSourceRecords": 0
+    },
+    {
+      "stage": "download",
+      "http": 200,
+      "rows": 1220,
+      "twoColumns": true
+    },
+    {
+      "stage": "review_import",
+      "http": 200,
+      "created": 1129,
+      "refreshed": 0
+    },
+    {
+      "stage": "review_queue",
+      "http": 200,
+      "cardAvailable": true,
+      "hasExample": true
+    },
+    {
+      "stage": "content_validation",
+      "correct": true,
+      "wordOriginalClean": true,
+      "containsKnownPhrase": true
+    }
+  ],
+  "contentChecks": {
+    "wordOriginalClean": true,
+    "containsKnownPhrase": true,
+    "firstFronts": [
+      "to mince",
+      "a doofus",
+      "retarded"
+    ],
+    "firstCardOriginal": "to mince",
+    "firstCardHasExample": true
+  },
+  "flowCompleted": true,
+  "contentCorrect": true,
+  "temporaryDatabaseRemoved": true
+}

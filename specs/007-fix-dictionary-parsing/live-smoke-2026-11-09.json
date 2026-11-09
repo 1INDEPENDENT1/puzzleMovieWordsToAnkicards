@@ -1,0 +1,68 @@
+{
+  "date": "2026-11-09",
+  "database": "isolated temporary PostgreSQL",
+  "applicationCodeChanged": false,
+  "steps": [
+    {
+      "stage": "temporary_database_ready",
+      "port": 55437
+    },
+    {
+      "stage": "application_ready",
+      "port": 18080,
+      "legacySqlInitialization": "disabled"
+    },
+    {
+      "stage": "login",
+      "http": 200,
+      "authenticated": true
+    },
+    {
+      "stage": "export_started",
+      "type": "COMBINED"
+    },
+    {
+      "stage": "export_completed",
+      "rowCount": 1984,
+      "phase": "COMPLETED"
+    },
+    {
+      "stage": "download",
+      "http": 200,
+      "rows": 1984,
+      "twoColumns": true
+    },
+    {
+      "stage": "review_import",
+      "http": 200,
+      "created": 1505,
+      "refreshed": 0
+    },
+    {
+      "stage": "review_queue",
+      "http": 200,
+      "cardAvailable": true,
+      "hasExample": true
+    },
+    {
+      "stage": "content_validation",
+      "correct": false,
+      "wordOriginalClean": false,
+      "containsKnownPhrase": false
+    }
+  ],
+  "contentChecks": {
+    "wordOriginalClean": false,
+    "containsKnownPhrase": false,
+    "firstFronts": [
+      "to mince to mince смягчать",
+      "a doofus a doofus придурок",
+      "retarded retarded умственно отсталый"
+    ],
+    "firstCardOriginal": "to mince to mince смягчать",
+    "firstCardHasExample": true
+  },
+  "flowCompleted": true,
+  "contentCorrect": false,
+  "temporaryDatabaseRemoved": true
+}

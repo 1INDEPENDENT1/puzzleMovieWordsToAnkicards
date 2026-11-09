@@ -1,0 +1,55 @@
+{
+  "date": "2026-11-09",
+  "fullSuite": {
+    "tests": 160,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "groups": {
+    "parser": {
+      "tests": 18,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "fetch": {
+      "tests": 26,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "service_metadata": {
+      "tests": 23,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "web": {
+      "tests": 23,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "review_compatibility": {
+      "tests": 19,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "database": "Disposable PostgreSQL 17 on loopback 55438, database regression_export; legacy SQL initialization disabled",
+  "lineCoverageMeasured": false,
+  "credentialsAudit": {
+    "leakedFiles": [],
+    "checked": "src and feature007 artifacts; values never printed"
+  },
+  "sanitizedFixtures": {
+    "htmlFiles": 22,
+    "activeMediaPrivateAttributesFound": false
+  },
+  "rawSources": {
+    "words.html": "55a24451534f21cd579d5a2e74d5717f1252f275375b4005ffa40827d5308a3c",
+    "phrases.html": "290381207a261133caaa9e9dd016d97b99d4fca3d7a486b3c47405ffe8534246"
+  }
+}

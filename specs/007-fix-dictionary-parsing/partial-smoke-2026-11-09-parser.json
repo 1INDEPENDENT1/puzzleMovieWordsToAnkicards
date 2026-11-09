@@ -1,0 +1,37 @@
+{
+  "scenario": "synthetic partial on observed sanitized source shell",
+  "network": "fake HttpClient only",
+  "database": "own temporary PostgreSQL 17, loopback port 55438",
+  "browserValidated": false,
+  "apiChecks": {
+    "passed": true,
+    "rejectedSourceRecords": 1,
+    "tsvRows": 4,
+    "directActions303": true,
+    "ssrWarningBeforeActions": true,
+    "refreshNoLoop": true,
+    "downloadAndReviewAfterWarning": true
+  },
+  "modeChecks": {
+    "WORDS": {
+      "rows": 2,
+      "completeness": "PARTIAL"
+    },
+    "PHRASES": {
+      "rows": 2,
+      "completeness": "FULL"
+    },
+    "COMBINED": {
+      "rows": 4,
+      "completeness": "PARTIAL"
+    }
+  },
+  "restartChecks": {
+    "passed": true,
+    "durablePartialWarning": true,
+    "sameTsvDownload": true,
+    "reviewWithoutCache409": true
+  },
+  "temporaryDatabaseStopped": true,
+  "temporaryDirectoryRemoved": true
+}

@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-09",
+  "method": "Observed actual IAB UI through CUA; fake transport and own temporary PostgreSQL only",
+  "parserPartial": {
+    "runningObserved": true,
+    "rejected": 1,
+    "warningBeforeActions": true,
+    "refreshStable": true,
+    "tsvDownloaded": true,
+    "reviewCreated": 3,
+    "screenshot": "partial-browser-2026-11-09.png"
+  },
+  "sourceCounterPartial": {
+    "runningObserved": true,
+    "rejected": 0,
+    "section": "PHRASE",
+    "declaredTotal": 3,
+    "retrievedTotal": 2,
+    "warningBeforeActions": true,
+    "refreshStable": true,
+    "tsvDownloaded": true,
+    "reviewCreated": 3,
+    "screenshot": "counter-warning-browser-2026-11-09.png"
+  },
+  "javascriptDisabledBrowserTest": false,
+  "noJavascriptCoverage": "Actual SSR HTML via HTTP/MVC; warning and actions exist without running JS. Browser itself kept JS enabled."
+}
