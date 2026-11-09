@@ -19,6 +19,31 @@ class ReviewCardDraftFactoryTest {
     private final ReviewCardDraftFactory factory = new ReviewCardDraftFactory();
 
     @Test
+    void realPhraseFieldsBecomeStandaloneDraftsAndInlineWordContextDoesNotInventAssociations() {
+        var parser = new com.puzzlemovies.export.export.DictionaryParser(new com.puzzlemovies.export.export.VocabularyNormalizer(
+                com.puzzlemovies.export.export.ExportTestFixtures.testLemmatizer()));
+        var phrases = parser.parsePhrasePages(List.of(com.puzzlemovies.export.export.ExportTestFixtures.page(
+                com.puzzlemovies.export.puzzlemovies.DictionarySection.PHRASE,
+                com.puzzlemovies.export.support.DictionaryFixtureLoader.html("phrases-real.html"), 36))).records();
+        var expected = com.puzzlemovies.export.support.DictionaryFixtureLoader.expectations("phrases-expected.json");
+        var words = parser.parseWordPages(List.of(com.puzzlemovies.export.export.ExportTestFixtures.page(
+                com.puzzlemovies.export.puzzlemovies.DictionarySection.WORD,
+                com.puzzlemovies.export.support.DictionaryFixtureLoader.html("edge-cases/words-inline-example-derived.html"), 1)));
+        assertTrue(words.acceptedSourceEntries().stream().anyMatch(e -> !e.examples().isEmpty()));
+        var drafts = factory.createDrafts(new ReviewExportSource(words.records(), phrases,
+                com.puzzlemovies.export.export.CompleteWordExampleMatches.empty()));
+        assertEquals(words.records().size() + 36, drafts.size());
+        assertNull(drafts.get(0).instanceText());
+        for (int i = 0; i < expected.size(); i++) {
+            var draft = drafts.get(i + words.records().size()); var e = expected.get(i);
+            assertEquals(e.original(), draft.originalText());
+            assertEquals(e.translation(), draft.translationText());
+            assertEquals(e.movieTitle(), draft.sourceContext());
+            assertNull(draft.instanceText());
+        }
+    }
+
+    @Test
     void mapsWordRecordWithGeneratedExampleIntoContextualDraft() {
         List<ReviewCardDraft> drafts = factory.createDrafts(ReviewTestFixtures.wordRecordWithExample());
 

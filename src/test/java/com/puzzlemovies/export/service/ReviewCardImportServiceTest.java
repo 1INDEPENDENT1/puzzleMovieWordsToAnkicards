@@ -21,6 +21,32 @@ import static org.mockito.Mockito.when;
 
 class ReviewCardImportServiceTest {
     @Test
+    void fullAndPartialAcceptedRealDraftsReuseIdentityAndPreserveAllScheduleFields() {
+        User user = ReviewTestFixtures.user("learner@example.com");
+        Map<String, ReviewCard> cards = new HashMap<>();
+        var service = new ReviewCardImportService(repositoryBackedBy(cards));
+        var expected = com.puzzlemovies.export.support.DictionaryFixtureLoader.expectations("phrases-expected.json");
+        var full = expected.stream().map(e -> new ReviewCardDraft(e.original(), null, e.translation(),
+                e.movieTitle(), ExportRecord.RecordKind.PHRASE)).toList();
+        assertEquals(36, service.importDrafts(user, full).created());
+        var card = cards.get(service.contentKey(full.get(0)));
+        var id = card.getId(); var key = card.getContentKey();
+        var due = java.time.Instant.parse("2027-01-02T03:04:05Z");
+        card.setManualContentOverride(true); card.setOriginalText("My correction");
+        card.setState(com.puzzlemovies.export.model.ReviewCardState.REVIEW);
+        card.setDueAt(due); card.setIntervalDays(17); card.setEaseFactor(2.1);
+        card.setReviewCount(9); card.setLapseCount(3); card.setLastReviewedAt(due.minusSeconds(100));
+        // The importer receives accepted drafts only; completion warnings are not card content.
+        assertEquals(0, service.importDrafts(user, full.subList(0, 2)).created());
+        assertEquals(0, service.importDrafts(user, full).created());
+        assertEquals(36, cards.size()); assertEquals(id, card.getId()); assertEquals(key, card.getContentKey());
+        assertEquals("My correction", card.getOriginalText()); assertTrue(card.isManualContentOverride());
+        assertEquals(com.puzzlemovies.export.model.ReviewCardState.REVIEW, card.getState());
+        assertEquals(due, card.getDueAt()); assertEquals(17, card.getIntervalDays());
+        assertEquals(2.1, card.getEaseFactor()); assertEquals(9, card.getReviewCount());
+        assertEquals(3, card.getLapseCount()); assertEquals(due.minusSeconds(100), card.getLastReviewedAt());
+    }
+    @Test
     void refreshPreservesCustomizedContentIdentityAndSchedule() {
         User user = ReviewTestFixtures.user("learner@example.com");
         Map<String, ReviewCard> cards = new HashMap<>();

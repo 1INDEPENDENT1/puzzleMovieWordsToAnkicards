@@ -289,6 +289,71 @@ class ReviewControllerTest {
                 .andExpect(status().isConflict());
     }
 
+    @Test
+    void partialImportRequiresWarningBeforeSourceAccessAndAcceptsOnlyStructuredSource() throws Exception {
+        User user = ReviewTestFixtures.user("partial@example.com");
+        TestContext context = context(user);
+        ExportJob job = new ExportJob(); job.setId(UUID.randomUUID()); job.setUser(user);
+        job.setStatus(ExportStatus.COMPLETED);
+        job.setErrorMessage("DICT_META_V1:{\"completeness\":\"PARTIAL\",\"unparsedRecordCount\":2}");
+        when(context.exportJobRepository.findByIdAndUser(job.getId(), user)).thenReturn(Optional.of(job));
+        var session = new org.springframework.mock.web.MockHttpSession();
+        context.mvc.perform(post("/reviews/cards").session(session).param("sourceExportId", job.getId().toString())
+                        .param("warningPresented", "true"))
+                .andExpect(status().isSeeOther()).andExpect(redirectedUrl("/exports/" + job.getId()));
+        org.mockito.Mockito.verifyNoInteractions(context.importService, context.exportService);
+
+        SessionUserResolver resolver = mock(SessionUserResolver.class);
+        when(resolver.resolve(any())).thenReturn(Optional.of(user));
+        new ExportController(context.exportService, context.exportJobRepository, resolver)
+                .progress(job.getId(), session, new org.springframework.ui.ExtendedModelMap());
+        ReviewExportSource source = new ReviewExportSource(
+                List.of(new DictionaryWord("Accepted", Set.of("translation"), "accepted", false)),
+                List.of(), new CompleteWordExampleMatches(Map.of()));
+        when(context.exportService.generatedReviewSourceForCompletedExport(user, job.getId())).thenReturn(Optional.of(source));
+        when(context.importService.importDrafts(eq(user), any())).thenReturn(new ReviewCardImportService.ImportResult(1, 0));
+        context.mvc.perform(post("/reviews/cards").session(session).param("sourceExportId", job.getId().toString()))
+                .andExpect(status().is3xxRedirection()).andExpect(redirectedUrl("/reviews"));
+        ArgumentCaptor<List<ReviewCardDraft>> drafts = ArgumentCaptor.forClass(List.class);
+        verify(context.importService).importDrafts(eq(user), drafts.capture());
+        assertEquals(1, drafts.getValue().size());
+        assertEquals("Accepted", drafts.getValue().get(0).originalText());
+        assertEquals("translation", drafts.getValue().get(0).translationText());
+    }
+
+    @Test
+    void corruptCompletionCannotImportEvenWhenSourceExists() throws Exception {
+        User user = ReviewTestFixtures.user("corrupt@example.com");
+        TestContext context = context(user);
+        ExportJob job = new ExportJob(); job.setId(UUID.randomUUID()); job.setUser(user);
+        job.setStatus(ExportStatus.COMPLETED); job.setErrorMessage("DICT_META_V9:sentinel");
+        when(context.exportJobRepository.findByIdAndUser(job.getId(), user)).thenReturn(Optional.of(job));
+        context.mvc.perform(post("/reviews/cards").param("sourceExportId", job.getId().toString()))
+                .andExpect(status().isConflict());
+        org.mockito.Mockito.verifyNoInteractions(context.exportService, context.importService);
+    }
+
+    @Test
+    void partialImportAfterPresentationStillRejectsLostSourceAndFailedExport() throws Exception {
+        User user = ReviewTestFixtures.user("lost@example.com");
+        TestContext context = context(user);
+        ExportJob job = new ExportJob(); job.setId(UUID.randomUUID()); job.setUser(user);
+        job.setStatus(ExportStatus.COMPLETED);
+        job.setErrorMessage("DICT_META_V1:{\"completeness\":\"PARTIAL\",\"unparsedRecordCount\":1}");
+        when(context.exportJobRepository.findByIdAndUser(job.getId(), user)).thenReturn(Optional.of(job));
+        var session = new org.springframework.mock.web.MockHttpSession();
+        SessionUserResolver resolver = mock(SessionUserResolver.class);
+        when(resolver.resolve(any())).thenReturn(Optional.of(user));
+        new ExportController(context.exportService, context.exportJobRepository, resolver)
+                .progress(job.getId(), session, new org.springframework.ui.ExtendedModelMap());
+        context.mvc.perform(post("/reviews/cards").session(session).param("sourceExportId", job.getId().toString()))
+                .andExpect(status().isConflict());
+        job.setStatus(ExportStatus.FAILED);
+        context.mvc.perform(post("/reviews/cards").session(session).param("sourceExportId", job.getId().toString()))
+                .andExpect(status().isConflict());
+        org.mockito.Mockito.verifyNoInteractions(context.importService);
+    }
+
     private ReviewDtos.ReviewQueueResponse queueWithCard() {
         return new ReviewDtos.ReviewQueueResponse(
                 new ReviewDtos.ReviewCardView(

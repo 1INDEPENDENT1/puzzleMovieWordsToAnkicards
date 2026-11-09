@@ -50,7 +50,7 @@ class PuzzleMoviesAuthClientTest {
     void requiresExpectedSuccessFields() throws Exception {
         PuzzleMoviesAuthClient client = new PuzzleMoviesAuthClient(
                 new StubHttpClient("""
-                        {"error":false,"user_id":100372848,"login":"miknsts@mail.ru","logged_in_cookie_name":"wp_logged_in_cookie","logged_in_cookie":"miknsts@mail.ru|2093862556|eYzms3twXkebQ2iboASV3MonircgNRq933oN6BqPV3Z"}
+                        {"error":false,"user_id":100372848,"login":"learner@example.invalid","logged_in_cookie_name":"wp_logged_in_cookie","logged_in_cookie":"learner@example.invalid|2093862556|eYzms3twXkebQ2iboASV3MonircgNRq933oN6BqPV3Z"}
                         """, List.of("wp_logged_in_cookie=value", "wordpress_test_cookie=1")),
                 properties(),
                 new ObjectMapper());
@@ -65,7 +65,7 @@ class PuzzleMoviesAuthClientTest {
     void keepsActiveCookiesAndDropsExpiredCookieDeletions() throws Exception {
         PuzzleMoviesAuthClient client = new PuzzleMoviesAuthClient(
                 new StubHttpClient("""
-                        {"error":false,"user_id":100372848,"login":"miknsts@mail.ru","logged_in_cookie_name":"wp_logged_in_cookie","logged_in_cookie":"body-value"}
+                        {"error":false,"user_id":100372848,"login":"learner@example.invalid","logged_in_cookie_name":"wp_logged_in_cookie","logged_in_cookie":"body-value"}
                         """, List.of(
                         "guest_id=old; expires=Wed, 04-Jun-2031 18:10:32 GMT; Path=/",
                         "wp_logged_in_cookie=deleted; expires=Thu, 01-Jan-1970 00:00:01 GMT; Max-Age=0; path=/",
@@ -90,7 +90,7 @@ class PuzzleMoviesAuthClientTest {
     void rejectsBodyMissingLoggedInCookieData() throws Exception {
         PuzzleMoviesAuthClient client = new PuzzleMoviesAuthClient(
                 new StubHttpClient("""
-                        {"error":false,"user_id":100372848,"login":"miknsts@mail.ru"}
+                        {"error":false,"user_id":100372848,"login":"learner@example.invalid"}
                         """, List.of("wp_logged_in_cookie=value")),
                 properties(),
                 new ObjectMapper());

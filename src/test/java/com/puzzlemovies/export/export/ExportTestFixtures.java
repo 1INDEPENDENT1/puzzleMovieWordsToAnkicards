@@ -7,35 +7,21 @@ import java.util.Locale;
 import java.util.Set;
 
 public final class ExportTestFixtures {
-    public static final String WORD_PAGE = """
-            <html><body>
-              <table>
-                <tr><td>Run</td><td>бежать</td></tr>
-                <tr><td>empty translation</td><td></td></tr>
-              </table>
-              <div class="dictionary__item">
-                <span class="dictionary__word">Moon</span>
-                <span class="dictionary__translation">луна</span>
-              </div>
-            </body></html>
-            """;
-
-    public static final String PHRASE_PAGE = """
-            <html><body>
-              <table>
-                <tr>
-                  <td>I am running home.</td>
-                  <td>Я бегу домой.</td>
-                  <td><a href="/movie/1">Arrival</a></td>
-                </tr>
-              </table>
-              <div class="dictionary__item">
-                <span class="dictionary__phrase">The moon is bright.</span>
-                <span class="dictionary__translation">Луна яркая.</span>
-                <span class="dictionary__movie"><a href="https://puzzle-movies.com/movie/2">Moon</a></span>
-              </div>
-            </body></html>
-            """;
+    public static String wordRow(String original, String translation) {
+        return "<tr class='dict__video__list-table__row'><td><div class='translate_line_without_popup'>" + original
+                + "</div><div class='dict__video__list-table__word__translate'>" + translation
+                + "</div></td><td class='dict__video__list-table__phrase'></td><td></td></tr>";
+    }
+    public static String phraseRow(String original, String translation, String movie) {
+        return "<tr class='dict__video__list-table__row'><td>" + movie
+                + "</td><td><div class='dict__video__list-table__phrase__eng'>" + original
+                + "</div><div class='dict__video__list-table__phrase__rus'>" + translation + "</div></td><td></td></tr>";
+    }
+    public static final String WORD_PAGE = "<table class='dict__video__list-table'>"
+            + wordRow("Run", "бежать") + wordRow("empty translation", "") + wordRow("Moon", "луна") + "</table>";
+    public static final String PHRASE_PAGE = "<table class='dict__video__list-table'>"
+            + phraseRow("I am running home.", "Я бегу домой.", "<a class='dict__video__list-table__info__balloon__title' href='/movie/1'>Arrival</a>")
+            + phraseRow("The moon is bright.", "Луна яркая.", "<a class='dict__video__list-table__info__balloon__title' href='/movie/2'>Moon</a>") + "</table>";
 
     public static final DictionaryWord RUN_WORD = new DictionaryWord("Run", Set.of("бежать"), "run", false);
     public static final DictionaryPhrase RUNNING_PHRASE = new DictionaryPhrase(
@@ -50,12 +36,17 @@ public final class ExportTestFixtures {
     private ExportTestFixtures() {
     }
 
-    public static List<String> wordPages() {
-        return List.of(WORD_PAGE);
+    public static com.puzzlemovies.export.puzzlemovies.DictionaryPage page(
+            com.puzzlemovies.export.puzzlemovies.DictionarySection section, String html, int count) {
+        return new com.puzzlemovies.export.puzzlemovies.DictionaryPage(section, 1,
+                java.net.URI.create("https://puzzle-movies.com/dictionary?item=" + section.item()), html,
+                new com.puzzlemovies.export.puzzlemovies.DictionaryPage.PageInspection(section, count, 1, null, count, true, true));
     }
-
-    public static List<String> phrasePages() {
-        return List.of(PHRASE_PAGE);
+    public static List<com.puzzlemovies.export.puzzlemovies.DictionaryPage> wordPages() {
+        return List.of(page(com.puzzlemovies.export.puzzlemovies.DictionarySection.WORD, WORD_PAGE, 3));
+    }
+    public static List<com.puzzlemovies.export.puzzlemovies.DictionaryPage> phrasePages() {
+        return List.of(page(com.puzzlemovies.export.puzzlemovies.DictionarySection.PHRASE, PHRASE_PAGE, 2));
     }
 
     public static DictionaryWord word(String sourceText, String translation, String matchingIdentity) {

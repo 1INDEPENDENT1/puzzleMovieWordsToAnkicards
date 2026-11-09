@@ -1,15 +1,19 @@
 package com.puzzlemovies.export.export;
 
+import com.puzzlemovies.export.puzzlemovies.DictionaryPage;
+import com.puzzlemovies.export.puzzlemovies.DictionarySection;
+import com.puzzlemovies.export.puzzlemovies.DictionaryPageInspector;
+import com.puzzlemovies.export.puzzlemovies.PuzzleMoviesDictionaryException;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 
 @Component
 public class DictionaryParser {
@@ -19,142 +23,143 @@ public class DictionaryParser {
         this.normalizer = normalizer;
     }
 
-    public List<DictionaryWord> parseWords(List<String> pages) {
-        List<DictionaryWord> words = new ArrayList<>();
-        for (String page : pages) {
-            Document document = Jsoup.parse(page, "https://puzzle-movies.com");
-            for (RawEntry entry : parseEntries(document, true)) {
-                VocabularyNormalizer.NormalizedText normalized = normalizer.normalizeSingle(entry.sourceText());
-                if (normalized.identity().isBlank()) {
-                    continue;
-                }
-                words.add(new DictionaryWord(
-                        entry.sourceText(),
-                        translations(entry.translation()),
-                        normalized.identity(),
-                        normalized.fallbackUsed()));
-            }
+    /** Extract source fields before linguistic normalization, retaining even malformed row positions. */
+    public List<RawDictionaryEntry> parseSourceEntries(DictionaryPage page) {
+        var inspection = page.inspection();
+        if (!inspection.recognized() || !inspection.authenticated() || inspection.section() != page.section()
+                || inspection.currentPage() != page.pageNumber()) {
+            throw structureFailure(page);
         }
-        return words;
-    }
-
-    public List<DictionaryPhrase> parsePhrases(List<String> pages) {
-        List<DictionaryPhrase> phrases = new ArrayList<>();
-        for (String page : pages) {
-            Document document = Jsoup.parse(page, "https://puzzle-movies.com");
-            for (RawEntry entry : parseEntries(document, false)) {
-                VocabularyNormalizer.NormalizedText normalized = normalizer.normalizePhrase(entry.sourceText());
-                if (normalized.identity().isBlank()) {
-                    continue;
-                }
-                phrases.add(new DictionaryPhrase(
-                        entry.sourceText(),
-                        translations(entry.translation()),
-                        entry.movieTitle(),
-                        entry.movieUrl(),
-                        normalized.tokens(),
-                        normalized.identity(),
-                        normalized.fallbackUsed()));
-            }
-        }
-        return phrases;
-    }
-
-    private List<RawEntry> parseEntries(Document document, boolean words) {
-        List<RawEntry> entries = new ArrayList<>();
-        entries.addAll(parseTableRows(document, words));
-        entries.addAll(parseCardRows(document, words));
-        return entries;
-    }
-
-    private List<RawEntry> parseTableRows(Document document, boolean words) {
-        List<RawEntry> entries = new ArrayList<>();
-        Elements rows = document.select("table tr:has(td), .dictionary__row:has(td)");
+        Document document = Jsoup.parse(page.html(), page.sourceUri().toString());
+        Element table = DictionaryPageInspector.dictionaryTable(document);
+        if (table == null) throw structureFailure(page);
+        // A single structural traversal means overlapping CSS classes never duplicate a source row.
+        List<Element> rows = DictionaryPageInspector.sourceRows(table);
+        if (rows.size() != inspection.sourceRecordCount()) throw structureFailure(page);
+        List<RawDictionaryEntry> entries = new ArrayList<>();
+        int rowNumber = 0;
         for (Element row : rows) {
-            Elements cells = row.select("td");
-            if (cells.isEmpty()) {
-                continue;
+            SourcePosition position = new SourcePosition(page.section(), page.pageNumber(), ++rowNumber,
+                    optionalAttribute(row, "data-id"));
+            List<Element> cells = row.children().stream().filter(child -> child.tagName().equals("td")).toList();
+            Element firstCell = cells.isEmpty() ? null : cells.get(0);
+            Element secondCell = cells.size() < 2 ? null : cells.get(1);
+            if (page.section() == DictionarySection.WORD) {
+                Element original = firstCell == null ? null : firstCell.selectFirst(".translate_line_without_popup");
+                var metadata = sourceMetadata(secondCell);
+                entries.add(new RawDictionaryEntry(position, sourceText(original),
+                        sourceTranslations(firstCell, ".dict__video__list-table__word__translate"),
+                        inlineExamples(secondCell, metadata), metadata.label(), metadata.title(), metadata.url()));
+            } else {
+                var metadata = sourceMetadata(firstCell);
+                entries.add(new RawDictionaryEntry(position,
+                        sourceText(secondCell == null ? null : secondCell.selectFirst(".dict__video__list-table__phrase__eng")),
+                        sourceTranslations(secondCell, ".dict__video__list-table__phrase__rus"), List.of(),
+                        metadata.label(), metadata.title(), metadata.url()));
             }
-            String source = text(cells.get(0));
-            if (source.isBlank()) {
-                continue;
-            }
-            String translation = cells.size() > 1 ? text(cells.get(1)) : "";
-            MovieInfo movieInfo = words ? MovieInfo.empty() : extractMovieInfo(row);
-            entries.add(new RawEntry(source, translation, movieInfo.title(), movieInfo.url()));
         }
-        return entries;
+        return List.copyOf(entries);
     }
 
-    private List<RawEntry> parseCardRows(Document document, boolean words) {
-        List<RawEntry> entries = new ArrayList<>();
-        Elements cards = document.select(".dictionary__item, .dictionary__list-item, .dictionary-item, .entry, .word-item, .phrase-item");
-        for (Element card : cards) {
-            String source = selectText(card,
-                    ".dictionary__source",
-                    words ? ".dictionary__word" : ".dictionary__phrase",
-                    words ? ".word" : ".phrase",
-                    ".source",
-                    ".original");
-            if (source.isBlank()) {
-                continue;
-            }
-            String translation = selectText(card,
-                    ".dictionary__target",
-                    ".dictionary__translation",
-                    ".translation",
-                    ".meaning",
-                    ".translated");
-            MovieInfo movieInfo = words ? MovieInfo.empty() : extractMovieInfo(card);
-            entries.add(new RawEntry(source, translation, movieInfo.title(), movieInfo.url()));
-        }
-        return entries;
+    public DictionaryParseResult<DictionaryWord> parseWordPages(List<DictionaryPage> pages) {
+        return parsePages(pages, DictionarySection.WORD, normalizer::normalizeSingle,
+                value -> new DictionaryWord(value.entry().sourceText(), new LinkedHashSet<>(value.entry().translations()),
+                        value.normalized().identity(), value.normalized().fallbackUsed()));
     }
 
-    private MovieInfo extractMovieInfo(Element row) {
-        Element link = row.selectFirst(".movie a[href], .dictionary__movie a[href], a[href*='/movie'], a[href*='/film']");
-        if (link == null) {
-            return MovieInfo.empty();
-        }
-        String title = text(link);
-        String url = link.absUrl("href");
-        if (url == null || url.isBlank()) {
-            url = link.attr("href").trim();
-        }
-        return new MovieInfo(title, url);
+    public DictionaryParseResult<DictionaryPhrase> parsePhrasePages(List<DictionaryPage> pages) {
+        return parsePages(pages, DictionarySection.PHRASE, normalizer::normalizePhrase,
+                value -> new DictionaryPhrase(value.entry().sourceText(), new LinkedHashSet<>(value.entry().translations()),
+                        value.entry().movieTitle(), value.entry().movieUrl(), value.normalized().tokens(),
+                        value.normalized().identity(), value.normalized().fallbackUsed()));
     }
 
-    private String selectText(Element row, String... selectors) {
-        for (String selector : selectors) {
-            Element element = row.selectFirst(selector);
-            if (element != null) {
-                String text = text(element);
-                if (!text.isBlank()) {
-                    return text;
+    private <T> DictionaryParseResult<T> parsePages(List<DictionaryPage> pages, DictionarySection section,
+            Function<String, VocabularyNormalizer.NormalizedText> normalize, Function<NormalizedEntry, T> create) {
+        List<T> records = new ArrayList<>();
+        List<RawDictionaryEntry> accepted = new ArrayList<>();
+        List<ParseIssue> issues = new ArrayList<>();
+        Set<Integer> seenPages = new LinkedHashSet<>();
+        int sourceCount = 0;
+        for (DictionaryPage page : pages) {
+            if (page.section() != section || !seenPages.add(page.pageNumber())) throw structureFailure(page);
+            for (RawDictionaryEntry entry : parseSourceEntries(page)) {
+                sourceCount++;
+                if (entry.sourceText().isBlank()) {
+                    issues.add(new ParseIssue(entry.position(), ParseIssue.Reason.MISSING_ORIGINAL));
+                    continue;
                 }
+                var normalized = normalize.apply(entry.sourceText());
+                if (normalized.identity().isBlank()) {
+                    issues.add(new ParseIssue(entry.position(), ParseIssue.Reason.UNUSABLE_IDENTITY));
+                    continue;
+                }
+                records.add(create.apply(new NormalizedEntry(entry, normalized)));
+                accepted.add(entry);
             }
         }
-        return "";
+        return new DictionaryParseResult<>(records, accepted, issues, sourceCount);
     }
 
-    private Set<String> translations(String translation) {
-        LinkedHashSet<String> values = new LinkedHashSet<>();
-        if (translation != null && !translation.isBlank()) {
-            values.add(translation.trim());
+    private List<SourceExample> inlineExamples(Element cell, SourceMetadata metadata) {
+        if (cell == null) return List.of();
+        Element english = cell.selectFirst(".dict__video__list-table__phrase__eng");
+        String original;
+        if (english != null) {
+            original = sourceText(english);
+        } else {
+            // The observed WORD specimen has an empty cell; the derived nonempty boundary is plain text.
+            Element content = cell.clone();
+            content.select(".dict__video__list-table__phrase__rus, .puzzle-card__phrase-source, a.dict__video__list-table__info__balloon__title").remove();
+            original = sourceText(content);
         }
-        return values;
+        return original.isBlank() ? List.of() : List.of(new SourceExample(original,
+                sourceTranslations(cell, ".dict__video__list-table__phrase__rus"),
+                metadata.label(), metadata.title(), metadata.url()));
     }
 
-    private String text(Element element) {
-        return element == null ? "" : element.text().trim();
+    private SourceMetadata sourceMetadata(Element cell) {
+        if (cell == null) return new SourceMetadata(null, null, null);
+        Element label = cell.selectFirst(".puzzle-card__phrase-source");
+        Element link = cell.selectFirst("a.dict__video__list-table__info__balloon__title");
+        String href = link == null ? null : optionalAttribute(link, "href");
+        return new SourceMetadata(optionalText(label), optionalText(link),
+                href == null ? null : link.absUrl("href"));
     }
 
-    private record RawEntry(String sourceText, String translation, String movieTitle, String movieUrl) {
-    }
-
-    private record MovieInfo(String title, String url) {
-        private static MovieInfo empty() {
-            return new MovieInfo(null, null);
+    private List<String> sourceTranslations(Element cell, String selector) {
+        if (cell == null) return List.of();
+        List<String> values = new ArrayList<>();
+        for (Element translation : cell.select(selector)) {
+            String value = sourceText(translation);
+            if (!value.isBlank()) values.add(value);
         }
+        return List.copyOf(values);
     }
+
+    private String sourceText(Element element) {
+        if (element == null) return "";
+        Element visible = element.clone();
+        visible.select("[hidden], [aria-hidden=true], .translate_line_with_popup, [style~=display\\s*:\\s*none]").remove();
+        // wholeText preserves the existing text-node boundaries around punctuation and inline spans.
+        return visible.wholeText().replaceAll("[\\s\\u00a0]+", " ").trim();
+    }
+
+    private String optionalText(Element element) {
+        String value = sourceText(element);
+        return value.isBlank() ? null : value;
+    }
+
+    private String optionalAttribute(Element element, String name) {
+        String value = element.attr(name).trim();
+        return value.isBlank() ? null : value;
+    }
+
+    private PuzzleMoviesDictionaryException structureFailure(DictionaryPage page) {
+        return new PuzzleMoviesDictionaryException(PuzzleMoviesDictionaryException.Category.STRUCTURE,
+                page.section(), page.pageNumber(), null);
+    }
+
+    private record NormalizedEntry(RawDictionaryEntry entry, VocabularyNormalizer.NormalizedText normalized) { }
+    private record SourceMetadata(String label, String title, String url) { }
 }

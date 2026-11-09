@@ -7,6 +7,7 @@ import com.puzzlemovies.export.model.ExportType;
 import com.puzzlemovies.export.model.User;
 import com.puzzlemovies.export.repo.ExportJobRepository;
 import com.puzzlemovies.export.service.ExportService;
+import com.puzzlemovies.export.service.ExportCompletionInfo;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
@@ -49,7 +50,14 @@ public class ExportController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         ExportJob job = exportJobRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        ExportJobStatus projection = projection(job, user);
         model.addAttribute("job", job);
+        model.addAttribute("completion", projection);
+        boolean partial = projection.completeness() == ExportCompletionInfo.Completeness.PARTIAL;
+        model.addAttribute("warningPresented", partial);
+        if (partial) {
+            ExportWarningPresentation.record(session, job);
+        }
         return "progress";
     }
 
@@ -60,7 +68,14 @@ public class ExportController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         ExportJob job = exportJobRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        return ExportJobStatus.from(job);
+        return projection(job, user);
+    }
+
+    private ExportJobStatus projection(ExportJob job, User user) {
+        ExportCompletionProjection projection = ExportCompletionProjection.from(job);
+        boolean reviewAvailable = projection.completion() != null
+                && exportService.generatedReviewSourceForCompletedExport(user, job.getId()).isPresent();
+        return ExportJobStatus.from(job, projection, reviewAvailable);
     }
 
     public record ExportJobStatus(String id,
@@ -70,8 +85,15 @@ public class ExportController {
                                   Instant startedAt,
                                   Instant completedAt,
                                   Integer rowCount,
-                                  String errorMessage) {
-        static ExportJobStatus from(ExportJob job) {
+                                  String errorMessage,
+                                  ExportCompletionInfo.Completeness completeness,
+                                  int unparsedRecordCount,
+                                  String warningMessage,
+                                  java.util.List<com.puzzlemovies.export.puzzlemovies.SourceCountDiscrepancy> sourceCountDiscrepancies,
+                                  boolean downloadAvailable,
+                                  boolean reviewCreationAvailable) {
+        static ExportJobStatus from(ExportJob job, ExportCompletionProjection projection, boolean reviewAvailable) {
+            ExportCompletionInfo info = projection.completion();
             return new ExportJobStatus(
                     job.getId().toString(),
                     job.getStatus(),
@@ -80,7 +102,13 @@ public class ExportController {
                     job.getStartedAt(),
                     job.getCompletedAt(),
                     job.getRowCount(),
-                    job.getErrorMessage()
+                    projection.errorMessage(),
+                    info == null ? null : info.completeness(),
+                    info == null ? 0 : info.unparsedRecordCount(),
+                    info == null ? null : info.warningMessage(),
+                    info == null ? java.util.List.of() : info.sourceCountDiscrepancies(),
+                    projection.downloadAvailable(),
+                    reviewAvailable
             );
         }
     }

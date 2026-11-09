@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-09",
+  "database": "isolated temporary PostgreSQL",
+  "applicationCodeChanged": false,
+  "steps": [
+    {
+      "stage": "temporary_database_ready",
+      "port": 55437
+    },
+    {
+      "stage": "application_ready",
+      "port": 18080,
+      "legacySqlInitialization": "disabled"
+    },
+    {
+      "stage": "login",
+      "http": 200,
+      "authenticated": true
+    },
+    {
+      "stage": "export_started",
+      "type": "COMBINED"
+    }
+  ],
+  "exportFailure": "Dictionary PAGINATION failure (section=PHRASE, page=22). Please retry or sign in again.",
+  "flowCompleted": false,
+  "failureCategory": "RuntimeError",
+  "failure": "Application export reported FAILED",
+  "temporaryDatabaseRemoved": true
+}
