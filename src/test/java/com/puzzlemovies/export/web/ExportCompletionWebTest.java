@@ -2,7 +2,6 @@ package com.puzzlemovies.export.web;
 
 import com.puzzlemovies.export.model.*;
 import com.puzzlemovies.export.repo.ExportJobRepository;
-import com.puzzlemovies.export.review.ReviewExportSource;
 import com.puzzlemovies.export.service.ExportService;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
@@ -134,13 +133,11 @@ class ExportCompletionWebTest {
                 .andExpect(jsonPath("$.reviewCreationAvailable").value(false));
     }
 
-    @Test void reviewCacheLossKeepsPartialFileAvailableAndWarningVisible() throws Exception {
+    @Test void missingSnapshotKeepsPartialFileAvailableAndWarningVisible() throws Exception {
         partial(4);
-        var source = new ReviewExportSource(List.of(), List.of(),
-                new com.puzzlemovies.export.export.CompleteWordExampleMatches(Map.of()));
-        when(service.generatedReviewSourceForCompletedExport(user, job.getId())).thenReturn(Optional.of(source));
+        when(service.reviewCreationAvailable(job)).thenReturn(true);
         mvc.perform(get("/exports/{id}/status", job.getId())).andExpect(jsonPath("$.reviewCreationAvailable").value(true));
-        when(service.generatedReviewSourceForCompletedExport(user, job.getId())).thenReturn(Optional.empty());
+        when(service.reviewCreationAvailable(job)).thenReturn(false);
         var session = new MockHttpSession();
         String html = mvc.perform(get("/exports/{id}", job.getId()).session(session))
                 .andReturn().getResponse().getContentAsString();

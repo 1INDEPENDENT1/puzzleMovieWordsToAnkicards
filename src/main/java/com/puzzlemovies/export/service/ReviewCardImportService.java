@@ -1,91 +1,48 @@
 package com.puzzlemovies.export.service;
 
-import com.puzzlemovies.export.model.ReviewCard;
-import com.puzzlemovies.export.model.ReviewCardState;
 import com.puzzlemovies.export.model.User;
-import com.puzzlemovies.export.repo.ReviewCardRepository;
-import com.puzzlemovies.export.review.ReviewCardDraft;
+import com.puzzlemovies.export.model.VocabularyImportSnapshot;
+import com.puzzlemovies.export.puzzlemovies.DictionarySection;
+import com.puzzlemovies.export.repo.VocabularyImportSnapshotRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
-import java.util.HexFormat;
-import java.util.List;
-import java.util.Locale;
+import java.util.UUID;
 
 @Service
 public class ReviewCardImportService {
-    private final ReviewCardRepository reviewCardRepository;
+    private final LinkedVocabularyService vocabulary;
+    private final VocabularyImportSnapshotRepository snapshots;
+    private final ExportSnapshotStore store;
 
-    public ReviewCardImportService(ReviewCardRepository reviewCardRepository) {
-        this.reviewCardRepository = reviewCardRepository;
+    public ReviewCardImportService(LinkedVocabularyService vocabulary, VocabularyImportSnapshotRepository snapshots,
+                                   ExportSnapshotStore store) {
+        this.vocabulary = vocabulary;
+        this.snapshots = snapshots;
+        this.store = store;
     }
 
     @Transactional
-    public ImportResult importDrafts(User user, List<ReviewCardDraft> drafts) {
-        int created = 0;
-        int updated = 0;
+    public ImportResult importSnapshot(User user, UUID jobId) {
+        User owner = vocabulary.lockOwner(user.getId());
+        var snapshot = snapshots.findByUser_IdAndExportJob_Id(owner.getId(), jobId)
+                .orElseThrow(SnapshotUnavailable::new);
+        if (snapshot.getSchemaVersion() != VocabularyImportSnapshot.SCHEMA_VERSION) throw new SnapshotUnavailable();
+        store.verify(snapshot);
+        var entries = snapshot.getPayload().entries();
+        long examples = entries.stream().mapToLong(row ->
+                row.position().section() == DictionarySection.PHRASE
+                        ? 1 : row.examples().size()).sum();
+        if (snapshot.getPublishedAt() != null) {
+            return new ImportResult(0, examples, true);
+        }
         Instant now = Instant.now();
-        for (ReviewCardDraft draft : drafts) {
-            String contentKey = contentKey(draft);
-            ReviewCard card = reviewCardRepository.findByUserAndContentKey(user, contentKey)
-                    .orElseGet(() -> {
-                        ReviewCard createdCard = new ReviewCard();
-                        createdCard.setUser(user);
-                        createdCard.setContentKey(contentKey);
-                        createdCard.setState(ReviewCardState.NEW);
-                        createdCard.setDueAt(now);
-                        return createdCard;
-                    });
-            boolean isNew = card.getId() == null;
-            if (!card.isManualContentOverride()) {
-                card.setOriginalText(draft.originalText());
-                card.setInstanceText(draft.instanceText());
-                card.setTranslationText(draft.translationText());
-            }
-            card.setSourceContext(draft.sourceContext());
-            card.setRecordKind(draft.recordKind());
-            reviewCardRepository.save(card);
-            if (isNew) {
-                created++;
-            } else {
-                updated++;
-            }
-        }
-        return new ImportResult(created, updated);
+        int created = vocabulary.publish(owner, snapshot.getId(), entries, now);
+        snapshot.setPublishedAt(now);
+        return new ImportResult(created, examples, false);
     }
 
-    public String contentKey(ReviewCardDraft draft) {
-        String identity = String.join("\u001f",
-                draft.recordKind().name(),
-                normalize(draft.originalText()),
-                normalize(draft.instanceText()),
-                normalize(draft.translationText()),
-                normalize(draft.sourceContext()));
-        return sha256(identity);
-    }
-
-    private String normalize(String value) {
-        if (value == null) {
-            return "";
-        }
-        return value.trim()
-                .replaceAll("\\s+", " ")
-                .toLowerCase(Locale.ROOT);
-    }
-
-    private String sha256(String value) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException("SHA-256 is unavailable", ex);
-        }
-    }
-
-    public record ImportResult(int created, int updated) {
-    }
+    public record ImportResult(int created, long examples, boolean alreadyPublished) {}
+    public static class SnapshotUnavailable extends RuntimeException {}
 }

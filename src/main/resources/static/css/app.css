@@ -30,6 +30,14 @@
 .card-editor::backdrop { background: rgba(20, 35, 45, 0.5); }
 .card-editor h2 { margin: 0; }
 .card-editor textarea { width: 100%; min-width: 0; resize: vertical; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; line-height: 1.5; }
+.examples-dialog { overflow-wrap: anywhere; }
+.examples-dialog .page-actions + .page-actions { margin-top: 12px; }
+.examples-dialog .example-actions a { color: var(--accent-dark); }
+.examples-dialog [role="status"]:empty { display: none; }
+.open-examples { margin-top: 16px; }
+#library-example-fields { margin: 16px 0; }
+#library-example-fields label[for] { display: block; margin-bottom: 6px; }
+#library-example-select { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
 .edit-feedback { margin: 0; color: var(--danger); overflow-wrap: anywhere; }
 .edit-feedback:empty { display: none; }
 .edit-current { float: right; margin: 0 0 12px 12px; }
@@ -308,6 +316,10 @@ button:hover, .button:hover {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     gap: 10px;
+}
+
+.answer-controls[hidden] {
+    display: none;
 }
 
 .answer-button.known {

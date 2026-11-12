@@ -1,19 +1,12 @@
 package com.puzzlemovies.export.web;
 
 import com.puzzlemovies.export.export.ExportRecord;
-import com.puzzlemovies.export.export.CompleteWordExampleMatches;
-import com.puzzlemovies.export.export.DictionaryPhrase;
-import com.puzzlemovies.export.export.DictionaryWord;
-import com.puzzlemovies.export.export.PhraseExample;
 import com.puzzlemovies.export.model.ExportJob;
 import com.puzzlemovies.export.model.ExportStatus;
 import com.puzzlemovies.export.model.ExportType;
 import com.puzzlemovies.export.model.ReviewAnswer;
 import com.puzzlemovies.export.model.User;
 import com.puzzlemovies.export.repo.ExportJobRepository;
-import com.puzzlemovies.export.review.ReviewCardDraftFactory;
-import com.puzzlemovies.export.review.ReviewCardDraft;
-import com.puzzlemovies.export.review.ReviewExportSource;
 import com.puzzlemovies.export.review.ReviewTestFixtures;
 import com.puzzlemovies.export.service.ExportService;
 import com.puzzlemovies.export.service.ReviewCardImportService;
@@ -53,7 +46,8 @@ class ReviewControllerTest {
         User user = ReviewTestFixtures.user("edit@example.com");
         TestContext context = context(user);
         var card = ReviewWebTestFixtures.editableCard(user, 5);
-        var cardView = new ReviewService(null, null, null).toView(card);
+        var cardView = new ReviewDtos.ReviewCardView(card.getId(), "Walk", null, "идти", null,
+                card.getState(), card.getDueAt(), List.of(), 5, UUID.randomUUID(), 0, null, 0);
         when(context.reviewService.updateContent(eq(user), eq(card.getId()), any()))
                 .thenReturn(new ReviewDtos.CardContentUpdateResponse(cardView));
         var session = new org.springframework.mock.web.MockHttpSession();
@@ -64,7 +58,7 @@ class ReviewControllerTest {
                 .andExpect(jsonPath("$.card.version").value(5));
         assertEquals(7, session.getAttribute("reviewedCount"));
         verify(context.reviewService).updateContent(user, card.getId(),
-                new ReviewDtos.CardContentUpdateRequest("Walk", "Walk home.", "идти", 4L));
+                new ReviewDtos.CardContentUpdateRequest("Walk", "идти", 4L));
         org.mockito.Mockito.verifyNoMoreInteractions(context.reviewService);
     }
 
@@ -126,25 +120,15 @@ class ReviewControllerTest {
         job.setUser(user);
         job.setType(ExportType.COMBINED);
         job.setStatus(ExportStatus.COMPLETED);
-        DictionaryWord word = new DictionaryWord("Run", Set.of("бежать"), "run", false);
-        DictionaryPhrase phrase = new DictionaryPhrase("I am running home.", Set.of("Я бегу домой."),
-                "Arrival", null, Set.of("run"), "i am run home", false);
-        PhraseExample example = new PhraseExample("run", phrase.sourceText(), phrase.translations(), phrase.movieTitle(), phrase.movieUrl());
-        ReviewExportSource source = new ReviewExportSource(List.of(word), List.of(phrase),
-                new CompleteWordExampleMatches(Map.of("run", List.of(example))));
         when(context.exportJobRepository.findByIdAndUser(job.getId(), user)).thenReturn(Optional.of(job));
-        when(context.exportService.generatedReviewSourceForCompletedExport(user, job.getId())).thenReturn(Optional.of(source));
-        when(context.importService.importDrafts(eq(user), any()))
-                .thenReturn(new ReviewCardImportService.ImportResult(1, 0));
+        when(context.importService.importSnapshot(user, job.getId()))
+                .thenReturn(new ReviewCardImportService.ImportResult(1, 1, false));
 
         context.mvc.perform(post("/reviews/cards").param("sourceExportId", job.getId().toString()))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/reviews"));
 
-        ArgumentCaptor<List<ReviewCardDraft>> drafts = ArgumentCaptor.forClass(List.class);
-        verify(context.importService).importDrafts(eq(user), drafts.capture());
-        assertEquals("Run", drafts.getValue().get(0).originalText());
-        assertEquals("I am running home.", drafts.getValue().get(0).instanceText());
+        verify(context.importService).importSnapshot(user, job.getId());
     }
 
     @Test
@@ -229,7 +213,7 @@ class ReviewControllerTest {
                         ReviewDtos.LookupActionType.INSTANCE_TRANSLATION,
                         "Translate sentence",
                         "https://translate.google.com/?text=A%20very%20long%20sentence",
-                        "A very long sentence")), 0);
+                        "A very long sentence")), 0, UUID.randomUUID(), 0, null, 0);
         ReviewDtos.ReviewQueueResponse queue = new ReviewDtos.ReviewQueueResponse(
                 card,
                 new ReviewDtos.ReviewCounts(0, 1, null));
@@ -279,7 +263,7 @@ class ReviewControllerTest {
         when(context.exportJobRepository.findByIdAndUser(missingId, user)).thenReturn(Optional.empty());
         when(context.exportJobRepository.findByIdAndUser(runningId, user)).thenReturn(Optional.of(running));
         when(context.exportJobRepository.findByIdAndUser(unavailableId, user)).thenReturn(Optional.of(completed));
-        when(context.exportService.generatedReviewSourceForCompletedExport(user, unavailableId)).thenReturn(Optional.empty());
+        when(context.importService.importSnapshot(user, unavailableId)).thenThrow(new ReviewCardImportService.SnapshotUnavailable());
 
         context.mvc.perform(post("/reviews/cards").param("sourceExportId", missingId.toString()))
                 .andExpect(status().isNotFound());
@@ -307,18 +291,11 @@ class ReviewControllerTest {
         when(resolver.resolve(any())).thenReturn(Optional.of(user));
         new ExportController(context.exportService, context.exportJobRepository, resolver)
                 .progress(job.getId(), session, new org.springframework.ui.ExtendedModelMap());
-        ReviewExportSource source = new ReviewExportSource(
-                List.of(new DictionaryWord("Accepted", Set.of("translation"), "accepted", false)),
-                List.of(), new CompleteWordExampleMatches(Map.of()));
-        when(context.exportService.generatedReviewSourceForCompletedExport(user, job.getId())).thenReturn(Optional.of(source));
-        when(context.importService.importDrafts(eq(user), any())).thenReturn(new ReviewCardImportService.ImportResult(1, 0));
+        when(context.importService.importSnapshot(user, job.getId()))
+                .thenReturn(new ReviewCardImportService.ImportResult(1, 0, false));
         context.mvc.perform(post("/reviews/cards").session(session).param("sourceExportId", job.getId().toString()))
                 .andExpect(status().is3xxRedirection()).andExpect(redirectedUrl("/reviews"));
-        ArgumentCaptor<List<ReviewCardDraft>> drafts = ArgumentCaptor.forClass(List.class);
-        verify(context.importService).importDrafts(eq(user), drafts.capture());
-        assertEquals(1, drafts.getValue().size());
-        assertEquals("Accepted", drafts.getValue().get(0).originalText());
-        assertEquals("translation", drafts.getValue().get(0).translationText());
+        verify(context.importService).importSnapshot(user, job.getId());
     }
 
     @Test
@@ -346,12 +323,13 @@ class ReviewControllerTest {
         when(resolver.resolve(any())).thenReturn(Optional.of(user));
         new ExportController(context.exportService, context.exportJobRepository, resolver)
                 .progress(job.getId(), session, new org.springframework.ui.ExtendedModelMap());
+        when(context.importService.importSnapshot(user, job.getId())).thenThrow(new ReviewCardImportService.SnapshotUnavailable());
         context.mvc.perform(post("/reviews/cards").session(session).param("sourceExportId", job.getId().toString()))
                 .andExpect(status().isConflict());
         job.setStatus(ExportStatus.FAILED);
         context.mvc.perform(post("/reviews/cards").session(session).param("sourceExportId", job.getId().toString()))
                 .andExpect(status().isConflict());
-        org.mockito.Mockito.verifyNoInteractions(context.importService);
+        verify(context.importService).importSnapshot(user, job.getId());
     }
 
     private ReviewDtos.ReviewQueueResponse queueWithCard() {
@@ -360,16 +338,17 @@ class ReviewControllerTest {
                         UUID.randomUUID(),
                         "Run",
                         "I am running home.",
-                        "бежать",
+                        "Р±РµР¶Р°С‚СЊ",
                         "Arrival",
                         com.puzzlemovies.export.model.ReviewCardState.NEW,
                         Instant.now(),
-                        List.of(), 0),
+                        List.of(), 0, UUID.randomUUID(), 1, UUID.randomUUID(), 0),
                 new ReviewDtos.ReviewCounts(0, 1, null));
     }
 
     private TestContext context(User user) {
         ReviewService reviewService = mock(ReviewService.class);
+        when(reviewService.beginPresentation(any(), any(), any())).thenAnswer(call -> call.getArgument(1));
         ExportService exportService = mock(ExportService.class);
         ExportJobRepository exportJobRepository = mock(ExportJobRepository.class);
         ReviewCardImportService importService = mock(ReviewCardImportService.class);
@@ -377,9 +356,7 @@ class ReviewControllerTest {
         when(resolver.resolve(any())).thenReturn(Optional.ofNullable(user));
         ReviewController controller = new ReviewController(
                 reviewService,
-                new ReviewCardDraftFactory(),
                 importService,
-                exportService,
                 exportJobRepository,
                 resolver);
         InternalResourceViewResolver viewResolver = new InternalResourceViewResolver();

@@ -9,13 +9,12 @@ public final class ReviewWebTestFixtures {
 
     public static com.puzzlemovies.export.model.ReviewCard editableCard(User user, long version) {
         var card = com.puzzlemovies.export.review.ReviewTestFixtures.versionedCard(user, "Run", version);
-        card.setInstanceText("I am running home.");
-        card.setTranslationText("бежать");
+        card.getVocabularyEntry().setTranslationOverride("бежать");
         return card;
     }
 
     public static String contentUpdate(long version) {
-        return "{\"originalText\":\"Walk\",\"instanceText\":\"Walk home.\","
+        return "{\"originalText\":\"Walk\","
                 + "\"translationText\":\"идти\",\"version\":" + version + "}";
     }
 

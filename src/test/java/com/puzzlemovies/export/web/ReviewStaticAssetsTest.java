@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ReviewStaticAssetsTest {
@@ -18,20 +19,12 @@ class ReviewStaticAssetsTest {
     }
 
     @Test
-    void currentCardEditorPreservesRevealStateAndDoesNotUseAnswerFlow() throws Exception {
+    void currentCardEditorOffersOnlyWordFields() throws Exception {
         String html = Files.readString(Path.of("src/main/resources/templates/reviews.html"));
-        String js = Files.readString(Path.of("src/main/resources/static/js/reviews.js"));
         assertTrue(html.contains("data-version"));
         assertTrue(html.contains("data-edit-current"));
         assertTrue(html.contains("id=\"review-editor\""));
-        assertTrue(js.contains("data-edit-current"));
-        assertTrue(js.contains("method: 'PATCH'"));
-        assertTrue(js.contains("const wasRevealed"));
-        assertTrue(js.contains("const previousRevealedAt"));
-        String edit = js.substring(js.indexOf("const saveEdit ="), js.indexOf("const updateCounts ="));
-        org.junit.jupiter.api.Assertions.assertFalse(edit.contains("/answer"));
-        org.junit.jupiter.api.Assertions.assertFalse(edit.contains("/next"));
-        org.junit.jupiter.api.Assertions.assertFalse(edit.contains("updateCounts("));
+        assertFalse(html.contains("name=\"instanceText\""));
     }
 
     @Test
@@ -41,8 +34,9 @@ class ReviewStaticAssetsTest {
         assertTrue(html.contains("<dialog"));
         assertTrue(html.contains("name=\"originalText\""));
         assertTrue(html.contains("name=\"translationText\""));
-        assertTrue(html.contains("name=\"instanceText\""));
+        assertFalse(html.contains("name=\"instanceText\""));
         assertTrue(html.contains("data-edit-card"));
+        assertTrue(html.contains("data-edit-examples"));
         assertTrue(html.contains("id=\"cancel-edit\""));
         assertTrue(js.contains("method: 'PATCH'"));
         assertTrue(js.contains("response.status === 409"));
@@ -55,7 +49,7 @@ class ReviewStaticAssetsTest {
         String html = Files.readString(Path.of("src/main/resources/templates/cards.html"));
         assertTrue(html.contains("<table"));
         assertTrue(html.contains("No translation saved"));
-        assertTrue(html.contains("No example saved"));
+        assertTrue(html.contains("item.exampleCount()"));
         assertTrue(html.contains("No answers yet"));
         assertTrue(html.contains("totalAnswers()"));
         assertTrue(html.contains("correctAnswers()"));
@@ -92,7 +86,8 @@ class ReviewStaticAssetsTest {
         assertTrue(html.contains("remaining-count"));
         assertTrue(html.contains("data-answer=\"UNKNOWN\""));
         assertTrue(html.contains("data-answer=\"KNOWN\""));
-        assertTrue(html.contains("card.instanceText()"));
-        assertTrue(html.contains("No translation saved"));
+        assertTrue(html.contains("card.exampleCount()"));
+        assertTrue(html.contains("card.presentationId()"));
+        assertTrue(html.contains("aria-labelledby=\"review-examples-title\""));
     }
 }

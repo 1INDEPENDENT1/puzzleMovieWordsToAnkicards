@@ -23,14 +23,15 @@ class ExportService007Test {
         when(jobs.findByIdAndUser(job.getId(), user)).thenReturn(Optional.of(job));
         var words = new ArrayList<DictionaryWord>(); var raw = new ArrayList<RawDictionaryEntry>(); var issues = new ArrayList<ParseIssue>();
         for (int i=1;i<=accepted;i++) {
-            words.add(new DictionaryWord("Run", Set.of("бежать"), "run", false));
-            raw.add(new RawDictionaryEntry(new SourcePosition(DictionarySection.WORD,1,i,null),"Run",List.of("бежать"),List.of(),null,null,null));
+            words.add(new DictionaryWord("Run", Set.of("Р±РµР¶Р°С‚СЊ"), "run", false));
+            raw.add(new RawDictionaryEntry(new SourcePosition(DictionarySection.WORD,1,i,null),"Run",List.of("Р±РµР¶Р°С‚СЊ"),List.of(),null,null,null));
         }
         for (int i=1;i<=rejected;i++) issues.add(new ParseIssue(new SourcePosition(DictionarySection.WORD,1,accepted+i,null),ParseIssue.Reason.MISSING_ORIGINAL));
         when(parser.parseWordPages(anyList())).thenReturn(new DictionaryParseResult<>(words,raw,issues,accepted+rejected));
         when(parser.parsePhrasePages(anyList())).thenReturn(DictionaryParseResult.empty());
         var props = new ExportProperties(); props.setOutputDir(output.toString());
-        var service = new ExportService(jobs,mock(PuzzleSessionTokenRepository.class),client,parser,new VocabularyDeduplicator(),new DictionaryMatcher(),new ExportRecordBuilder(),new AnkiExportFormatter(),props);
+        var service = new ExportService(jobs,mock(PuzzleSessionTokenRepository.class),client,parser,new VocabularyDeduplicator(),new DictionaryMatcher(),new ExportRecordBuilder(),new AnkiExportFormatter(),props,
+                new ExportSnapshotStore(jobs,mock(VocabularyImportSnapshotRepository.class),new com.fasterxml.jackson.databind.ObjectMapper()),Runnable::run);
         return new Context(service,job,user,jobs,client);
     }
     @Test void partialPreservesAcceptedAndCountsSourceBeforeDedupe() throws Exception {
@@ -38,7 +39,7 @@ class ExportService007Test {
         assertEquals(ExportStatus.COMPLETED,c.job.getStatus());
         assertEquals(ExportCompletionInfo.partial(1),ExportCompletionMetadataCodec.decode(c.job));
         assertEquals(1,c.job.getRowCount());
-        assertEquals(1,c.service.generatedRecordsForCompletedExport(c.user,c.job.getId()).orElseThrow().size());
+        assertEquals(1,Files.readAllLines(Path.of(c.job.getOutputFilePath())).size());
         assertTrue(Files.isRegularFile(Path.of(c.job.getOutputFilePath())));
     }
     @Test void confirmedEmptyIsSuccessfulButAllRejectedFails() {
@@ -47,7 +48,7 @@ class ExportService007Test {
         assertEquals(ExportCompletionInfo.full(),ExportCompletionMetadataCodec.decode(empty.job));
         var broken=context(0,2); broken.service.runExportAsync(broken.job.getId(),ExportType.COMBINED,"SENTINEL");
         assertEquals(ExportStatus.FAILED,broken.job.getStatus()); assertNull(broken.job.getOutputFilePath());
-        assertTrue(broken.service.generatedRecordsForCompletedExport(broken.user,broken.job.getId()).isEmpty());
+        assertTrue(!broken.service.reviewCreationAvailable(broken.job));
     }
     @Test void sourceFailureDoesNotExposeRawExceptionOrPublishPartial() throws Exception {
         var c=context(1,0); when(c.client.fetchPhrasePages(anyString())).thenThrow(new IOException("SENTINEL_COOKIE_SHOULD_NOT_APPEAR"));
@@ -55,12 +56,12 @@ class ExportService007Test {
         assertEquals(ExportStatus.FAILED,c.job.getStatus());
         assertFalse(c.job.getErrorMessage().contains("SENTINEL")); assertNull(c.job.getOutputFilePath());
     }
-    @Test void failedPublicationRevokesCacheAndOnlyOwnFile() throws Exception {
+    @Test void failedPublicationRevokesCompletionAndOnlyOwnFile() throws Exception {
         var c=context(1,0); Path other=Files.writeString(output.resolve("existing-user-file.tsv"),"keep");
         doAnswer(inv -> { if(c.job.getStatus()==ExportStatus.COMPLETED) throw new IllegalStateException("save failure"); return c.job; }).when(c.jobs).save(any(ExportJob.class));
         c.service.runExportAsync(c.job.getId(),ExportType.COMBINED,"SENTINEL");
         assertEquals(ExportStatus.FAILED,c.job.getStatus()); assertNull(c.job.getOutputFilePath()); assertNull(c.job.getRowCount());
-        assertTrue(c.service.generatedReviewSourceForCompletedExport(c.user,c.job.getId()).isEmpty());
+        assertTrue(!c.service.reviewCreationAvailable(c.job));
         assertEquals("keep",Files.readString(other));
         try(var files=Files.list(output)) {assertEquals(1,files.count());}
     }
@@ -81,7 +82,7 @@ class ExportService007Test {
         assertEquals(ExportStatus.FAILED,c.job.getStatus());
         assertFalse(Files.exists(output.resolve("export-"+c.job.getId()+".tsv")));
         assertEquals("keep",Files.readString(other));
-        assertTrue(c.service.generatedRecordsForCompletedExport(c.user,c.job.getId()).isEmpty());
+        assertTrue(!c.service.reviewCreationAvailable(c.job));
     }
     @Test void existingArtifactIsNeverOverwrittenOrDeletedOnCreationFailure() throws Exception {
         var c=context(1,0);

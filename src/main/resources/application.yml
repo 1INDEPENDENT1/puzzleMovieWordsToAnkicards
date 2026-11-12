@@ -9,10 +9,12 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+    properties:
+      hibernate.schema_update.unique_constraint_strategy: RECREATE_QUIETLY
     open-in-view: false
+    defer-datasource-initialization: true
   sql:
     init:
-      # Run the idempotent review-card upgrade before Hibernate validates the entity shape.
       mode: always
       separator: "@@"
 

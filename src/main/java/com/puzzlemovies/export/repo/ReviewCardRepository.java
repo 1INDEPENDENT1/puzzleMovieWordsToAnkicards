@@ -2,6 +2,7 @@ package com.puzzlemovies.export.repo;
 
 import com.puzzlemovies.export.model.ReviewCard;
 import com.puzzlemovies.export.model.User;
+import com.puzzlemovies.export.model.VocabularyEntry;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -17,24 +18,28 @@ public interface ReviewCardRepository extends JpaRepository<ReviewCard, UUID> {
     interface CardLibraryRow {
         UUID getId();
         long getVersion();
-        String getOriginalText();
-        String getInstanceText();
-        String getTranslationText();
+        VocabularyEntry getEntry();
+        default String getOriginalText() { return getEntry().getEffectiveOriginal(); }
+        default String getInstanceText() { return null; }
+        default String getTranslationText() { return getEntry().getEffectiveTranslation(); }
+        default UUID getVocabularyEntryId() { return getEntry().getId(); }
+        long getExampleCount();
         long getTotalAnswers();
         long getCorrectAnswers();
         long getIncorrectAnswers();
     }
 
     @Query(value = """
-            select c.id as id, c.version as version, c.originalText as originalText,
-                   c.instanceText as instanceText, c.translationText as translationText,
-                   count(a.id) as totalAnswers,
-                   sum(case when a.answer = com.puzzlemovies.export.model.ReviewAnswer.KNOWN then 1 else 0 end) as correctAnswers,
-                   sum(case when a.answer = com.puzzlemovies.export.model.ReviewAnswer.UNKNOWN then 1 else 0 end) as incorrectAnswers
-            from ReviewCard c left join ReviewAttempt a on a.reviewCard = c and a.user = :user
+            select c.id as id, e.version as version, e as entry,
+                   (select count(l.id) from WordExampleLink l where l.user = :user and l.entry = e) as exampleCount,
+                   (select count(a.id) from ReviewAttempt a where a.reviewCard = c and a.user = :user) as totalAnswers,
+                   (select count(a.id) from ReviewAttempt a where a.reviewCard = c and a.user = :user
+                       and a.answer = com.puzzlemovies.export.model.ReviewAnswer.KNOWN) as correctAnswers,
+                   (select count(a.id) from ReviewAttempt a where a.reviewCard = c and a.user = :user
+                       and a.answer = com.puzzlemovies.export.model.ReviewAnswer.UNKNOWN) as incorrectAnswers
+            from ReviewCard c join c.vocabularyEntry e
             where c.user = :user and c.state <> com.puzzlemovies.export.model.ReviewCardState.SUSPENDED
-            group by c.id, c.version, c.originalText, c.instanceText, c.translationText
-            order by lower(c.originalText), c.id
+            order by lower(coalesce(e.originalOverride, e.sourceOriginal)), c.id
             """, countQuery = """
             select count(c) from ReviewCard c
             where c.user = :user and c.state <> com.puzzlemovies.export.model.ReviewCardState.SUSPENDED
@@ -43,7 +48,8 @@ public interface ReviewCardRepository extends JpaRepository<ReviewCard, UUID> {
 
     Optional<ReviewCard> findByIdAndUser(UUID id, User user);
 
-    Optional<ReviewCard> findByUserAndContentKey(User user, String contentKey);
+    @Query("select c.vocabularyEntry.id from ReviewCard c where c.user.id = :userId")
+    List<UUID> findEntryIdsByUserId(@Param("userId") UUID userId);
 
     @Query("""
             select c from ReviewCard c

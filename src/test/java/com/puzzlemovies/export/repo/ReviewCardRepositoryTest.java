@@ -1,13 +1,9 @@
 package com.puzzlemovies.export.repo;
 
 import com.puzzlemovies.export.model.ReviewCard;
-import jakarta.persistence.Table;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Method;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.*;
 import com.puzzlemovies.export.review.ReviewTestFixtures;
 import com.puzzlemovies.export.model.ReviewAnswer;
@@ -57,19 +53,19 @@ class ReviewCardRepositoryTest {
         em.persist(owner);
         em.persist(other);
         var zero = ReviewTestFixtures.dueCard(owner, "000 empty");
-        zero.setTranslationText(null);
+        zero.getVocabularyEntry().setTranslationOverride("");
         zero.setReviewCount(99); // Cached scheduling counts must not supply library statistics.
-        em.persist(zero);
+        persistCard(zero);
         var mixed = ReviewTestFixtures.dueCard(owner, "001 mixed");
-        em.persist(mixed);
+        persistCard(mixed);
         ReviewTestFixtures.history(owner, mixed, ReviewAnswer.KNOWN, ReviewAnswer.UNKNOWN, ReviewAnswer.KNOWN)
                 .forEach(em::persist);
         var known = ReviewTestFixtures.dueCard(owner, "002 known");
-        em.persist(known);
+        persistCard(known);
         em.persist(ReviewTestFixtures.attempt(owner, known, ReviewAnswer.KNOWN));
-        em.persist(ReviewTestFixtures.suspendedCard(owner, "hidden"));
-        em.persist(ReviewTestFixtures.dueCard(other, "foreign"));
-        for (int i = 0; i < 25; i++) em.persist(ReviewTestFixtures.dueCard(owner, "same"));
+        persistCard(ReviewTestFixtures.suspendedCard(owner, "hidden"));
+        persistCard(ReviewTestFixtures.dueCard(other, "foreign"));
+        for (int i = 0; i < 25; i++) persistCard(ReviewTestFixtures.dueCard(owner, "same"));
         em.flush();
         em.clear();
         var first = cards.findLibrary(owner, PageRequest.of(0, 25));
@@ -78,7 +74,7 @@ class ReviewCardRepositoryTest {
         assertEquals(25, first.getNumberOfElements());
         assertEquals(3, second.getNumberOfElements());
         assertEquals(0, first.getContent().get(0).getTotalAnswers());
-        assertNull(first.getContent().get(0).getTranslationText());
+        assertEquals("", first.getContent().get(0).getTranslationText());
         var stats = first.getContent().get(1);
         assertEquals(3, stats.getTotalAnswers());
         assertEquals(2, stats.getCorrectAnswers());
@@ -94,118 +90,26 @@ class ReviewCardRepositoryTest {
     }
 
     @Test
-    void persistedContentEditIncrementsVersionAndPreservesAttemptAndSchedule() {
-        var user = ReviewTestFixtures.user("edit-db@example.com");
-        em.persist(user);
-        var card = ReviewTestFixtures.dueCard(user, "Run");
-        card.setDueAt(java.time.Instant.parse("2026-09-07T10:00:00Z"));
-        em.persist(card);
-        var attempt = ReviewTestFixtures.attempt(user, card, ReviewAnswer.UNKNOWN);
-        em.persist(attempt);
-        em.flush();
-        long originalVersion = card.getVersion();
-        var due = card.getDueAt();
-        var service = new com.puzzlemovies.export.service.ReviewService(cards, attempts,
-                new com.puzzlemovies.export.review.BinaryReviewScheduler());
-        var result = service.updateContent(user, card.getId(),
-                new com.puzzlemovies.export.web.ReviewDtos.CardContentUpdateRequest("Walk", null, null, originalVersion));
-        assertEquals(originalVersion + 1, result.card().version());
-        em.clear();
-        var saved = cards.findByIdAndUser(card.getId(), user).orElseThrow();
-        assertEquals("Walk", saved.getOriginalText());
-        assertEquals(due.truncatedTo(java.time.temporal.ChronoUnit.MICROS), saved.getDueAt());
-        assertTrue(saved.isManualContentOverride());
-        assertEquals(0, saved.getReviewCount());
-        assertEquals(ReviewAnswer.UNKNOWN, attempts.findById(attempt.getId()).orElseThrow().getAnswer());
-        var other = ReviewTestFixtures.user("foreign-edit@example.com");
-        em.persist(other);
-        assertThrows(com.puzzlemovies.export.service.ReviewService.CardNotFoundException.class,
-                () -> service.updateContent(other, card.getId(),
-                    new com.puzzlemovies.export.web.ReviewDtos.CardContentUpdateRequest("Foreign", null, null, saved.getVersion())));
-        assertThrows(com.puzzlemovies.export.service.ReviewService.StaleCardException.class,
-                () -> service.updateContent(user, card.getId(),
-                    new com.puzzlemovies.export.web.ReviewDtos.CardContentUpdateRequest("Stale", null, null, originalVersion)));
-        long beforeRepeat = saved.getVersion();
-        var repeat = service.updateContent(user, saved.getId(),
-                new com.puzzlemovies.export.web.ReviewDtos.CardContentUpdateRequest("Walk", "", "", beforeRepeat));
-        assertEquals(beforeRepeat + 1, repeat.card().version());
-    }
-
-    @Test
     void databaseRejectsAnEntityLoadedBeforeAnotherUpdate() {
         var user = ReviewTestFixtures.user("race@example.com");
         em.persist(user);
         var stale = ReviewTestFixtures.dueCard(user, "Run");
-        em.persist(stale);
+        persistCard(stale);
         em.flush();
         em.detach(stale);
         var current = em.find(ReviewCard.class, stale.getId());
-        current.setOriginalText("Latest");
+        current.setReviewCount(1);
         em.flush();
         em.clear();
-        stale.setOriginalText("Outdated");
+        stale.setReviewCount(2);
         assertThrows(jakarta.persistence.OptimisticLockException.class, () -> {
             em.merge(stale);
             em.flush();
         });
     }
 
-    @Test
-    void repeatImportOfAcceptedDraftsPreservesPersistedHistoryAndManualSchedule() {
-        var user = ReviewTestFixtures.user("import-history@example.invalid");
-        em.persist(user);
-        var expected = com.puzzlemovies.export.support.DictionaryFixtureLoader.expectations("phrases-expected.json").get(0);
-        var draft = new com.puzzlemovies.export.review.ReviewCardDraft(expected.original(), null,
-                expected.translation(), expected.movieTitle(), com.puzzlemovies.export.export.ExportRecord.RecordKind.PHRASE);
-        var importer = new com.puzzlemovies.export.service.ReviewCardImportService(cards);
-        assertEquals(1, importer.importDrafts(user, java.util.List.of(draft)).created());
-        var key = importer.contentKey(draft);
-        var card = cards.findByUserAndContentKey(user, key).orElseThrow();
-        var id = card.getId();
-        var due = java.time.Instant.parse("2027-01-02T03:04:05Z");
-        card.setDueAt(due); card.setIntervalDays(17); card.setReviewCount(9);
-        card.setManualContentOverride(true); card.setOriginalText("My correction");
-        var attempt = ReviewTestFixtures.attempt(user, card, ReviewAnswer.KNOWN);
-        em.persist(attempt); em.flush(); em.clear();
-        assertEquals(0, importer.importDrafts(user, java.util.List.of(draft)).created());
-        assertEquals(0, importer.importDrafts(user, java.util.List.of(draft)).created());
-        em.flush(); em.clear();
-        var saved = cards.findByUserAndContentKey(user, key).orElseThrow();
-        assertEquals(id, saved.getId()); assertEquals(key, saved.getContentKey());
-        assertEquals(due, saved.getDueAt()); assertEquals(17, saved.getIntervalDays());
-        assertEquals(9, saved.getReviewCount()); assertTrue(saved.isManualContentOverride());
-        assertEquals("My correction", saved.getOriginalText());
-        var history = attempts.findByReviewCardAndUserOrderByReviewedAtAsc(saved, user);
-        assertEquals(1, history.size()); assertEquals(attempt.getId(), history.get(0).getId());
-        assertEquals(ReviewAnswer.KNOWN, history.get(0).getAnswer());
-    }
-
-    @Test
-    void reviewCardHasOwnerScopedDuplicateConstraint() {
-        Table table = ReviewCard.class.getAnnotation(Table.class);
-
-        assertNotNull(table);
-        assertEquals("review_cards", table.name());
-        assertEquals("uk_review_cards_user_content_key", table.uniqueConstraints()[0].name());
-        assertEquals("user_id", table.uniqueConstraints()[0].columnNames()[0]);
-        assertEquals("content_key", table.uniqueConstraints()[0].columnNames()[1]);
-    }
-
-    @Test
-    void repositoryExposesOwnerScopedDueAndDuplicateQueries() throws Exception {
-        assertMethod("findByIdAndUser", 2);
-        assertMethod("findByUserAndContentKey", 2);
-        assertMethod("findDueCards", 3);
-        assertMethod("countDueCards", 2);
-        assertMethod("findNextDueAt", 2);
-    }
-
-    private void assertMethod(String name, int parameterCount) {
-        for (Method method : ReviewCardRepository.class.getMethods()) {
-            if (method.getName().equals(name) && method.getParameterCount() == parameterCount) {
-                return;
-            }
-        }
-        throw new AssertionError("Missing method " + name);
+    private void persistCard(ReviewCard card) {
+        em.persist(card.getVocabularyEntry());
+        em.persist(card);
     }
 }

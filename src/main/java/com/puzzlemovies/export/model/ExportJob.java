@@ -11,6 +11,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -19,7 +20,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "export_jobs")
+@Table(name = "export_jobs", uniqueConstraints = @UniqueConstraint(
+        name = "uk_export_jobs_user_id", columnNames = {"user_id", "id"}))
 public class ExportJob {
     @Id
     private UUID id;

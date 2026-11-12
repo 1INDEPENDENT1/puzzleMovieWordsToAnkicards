@@ -7,11 +7,11 @@ import static com.puzzlemovies.export.export.DictionarySourceFieldsTest.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DictionaryParserTest {
-    @Test void typedWordsPreserveSourceAndExistingNormalizerIdentity() {
+    @Test void typedWordsPreserveSourceAndUseFullMatchingForm() {
         var result = PARSER.parseWordPages(List.of(page(DictionarySection.WORD, "words-real.html", 36)));
         assertEquals(36, result.records().size()); assertEquals(0, result.unparsedRecordCount());
         var word = result.records().get(0);
-        assertEquals("to mince", word.sourceText()); assertEquals("to", word.matchingIdentity());
+        assertEquals("to mince", word.sourceText()); assertEquals("mince", word.matchingIdentity());
         assertTrue(word.translations().contains("смягчать"));
     }
     @Test void typedPhrasesRetainMetadataAndMatchingTokens() {

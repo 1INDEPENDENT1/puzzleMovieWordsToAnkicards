@@ -1,16 +1,14 @@
 package com.puzzlemovies.export.web;
 
 import com.puzzlemovies.export.model.ExportJob;
-import com.puzzlemovies.export.model.ExportStatus;
 import com.puzzlemovies.export.model.User;
 import com.puzzlemovies.export.repo.ExportJobRepository;
-import com.puzzlemovies.export.review.ReviewCardDraft;
-import com.puzzlemovies.export.review.ReviewCardDraftFactory;
-import com.puzzlemovies.export.review.ReviewExportSource;
-import com.puzzlemovies.export.service.ExportService;
 import com.puzzlemovies.export.service.ReviewCardImportService;
 import com.puzzlemovies.export.service.ReviewService;
 import jakarta.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpServletResponse;
+import com.puzzlemovies.export.review.ReviewPresentation;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -36,30 +34,29 @@ public class ReviewController {
     private static final String IMPORT_MESSAGE = "reviewImportMessage";
 
     private final ReviewService reviewService;
-    private final ReviewCardDraftFactory draftFactory;
     private final ReviewCardImportService importService;
-    private final ExportService exportService;
     private final ExportJobRepository exportJobRepository;
     private final SessionUserResolver sessionUserResolver;
 
     public ReviewController(ReviewService reviewService,
-                            ReviewCardDraftFactory draftFactory,
                             ReviewCardImportService importService,
-                            ExportService exportService,
                             ExportJobRepository exportJobRepository,
                             SessionUserResolver sessionUserResolver) {
         this.reviewService = reviewService;
-        this.draftFactory = draftFactory;
         this.importService = importService;
-        this.exportService = exportService;
         this.exportJobRepository = exportJobRepository;
         this.sessionUserResolver = sessionUserResolver;
+    }
+
+    @ModelAttribute
+    void preventCaching(HttpServletResponse response) {
+        response.setHeader("Cache-Control", "no-store");
     }
 
     @GetMapping("/reviews")
     public String reviews(HttpSession session, Model model) {
         User user = currentUser(session);
-        ReviewDtos.ReviewQueueResponse queue = reviewService.nextDueCard(user, reviewedCount(session));
+        ReviewDtos.ReviewQueueResponse queue = queue(user, session);
         model.addAttribute("queue", queue);
         model.addAttribute("card", queue.card());
         model.addAttribute("counts", queue.counts());
@@ -99,22 +96,18 @@ public class ReviewController {
             return ResponseEntity.status(HttpStatus.SEE_OTHER)
                     .header(org.springframework.http.HttpHeaders.LOCATION, "/exports/" + job.getId()).build();
         }
-        ReviewExportSource source = exportService.generatedReviewSourceForCompletedExport(user, sourceExportId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.CONFLICT,
-                        "Generated review records are no longer available; run a fresh export"));
-        java.util.List<ReviewCardDraft> drafts = draftFactory.createDrafts(source);
-        ReviewCardImportService.ImportResult result = importService.importDrafts(user, drafts);
-        session.setAttribute(REVIEWED_COUNT, 0);
-        session.setAttribute(IMPORT_MESSAGE,
-                "Review cards ready: " + result.created() + " created, " + result.updated() + " refreshed.");
+        var result = importService.importSnapshot(user, sourceExportId);
+        if (!result.alreadyPublished()) session.setAttribute(REVIEWED_COUNT, 0);
+        session.setAttribute(IMPORT_MESSAGE, result.alreadyPublished()
+                ? "This export has already been imported."
+                : "Vocabulary ready: " + result.created() + " new cards, " + result.examples() + " source examples.");
         return "redirect:/reviews";
     }
 
     @GetMapping("/reviews/next")
     @ResponseBody
     public ReviewDtos.ReviewQueueResponse next(HttpSession session) {
-        return reviewService.nextDueCard(currentUser(session), reviewedCount(session));
+        return queue(currentUser(session), session);
     }
 
     @PostMapping("/reviews/cards/{id}/answer")
@@ -130,7 +123,9 @@ public class ReviewController {
                 request == null ? null : request.responseMillis(),
                 reviewedCount(session));
         session.setAttribute(REVIEWED_COUNT, response.counts().reviewedCount());
-        return response;
+        ReviewPresentation.invalidate(session, user.getId(), id);
+        return new ReviewDtos.ReviewAnswerResponse(response.result(),
+                reviewService.beginPresentation(user, response.nextCard(), session), response.counts());
     }
 
     @ExceptionHandler(ReviewService.InvalidAnswerException.class)
@@ -143,6 +138,65 @@ public class ReviewController {
     public ReviewDtos.CardContentUpdateResponse updateContent(@PathVariable("id") UUID id,
             @RequestBody ReviewDtos.CardContentUpdateRequest request, HttpSession session) {
         return reviewService.updateContent(currentUser(session), id, request);
+    }
+
+    @GetMapping("/reviews/cards/{id}/examples")
+    @ResponseBody
+    public ReviewDtos.ExamplePage<ReviewDtos.ExampleItem> reviewExamples(
+            @PathVariable("id") UUID id, @RequestParam("presentationId") UUID presentationId,
+            @RequestParam(value = "page", defaultValue = "0") int page, HttpSession session) {
+        return reviewService.reviewExamples(currentUser(session), id, presentationId, page, session);
+    }
+
+    @PostMapping("/reviews/cards/{id}/reveal")
+    @ResponseBody
+    public ReviewDtos.MainReveal reveal(@PathVariable("id") UUID id,
+                                        @RequestBody ReviewDtos.PresentationRequest request, HttpSession session) {
+        return reviewService.reveal(currentUser(session), id, request.presentationId(), session);
+    }
+
+    @PostMapping("/reviews/cards/{id}/examples/{exampleId}/translation")
+    @ResponseBody
+    public ReviewDtos.ExampleReveal exampleTranslation(@PathVariable("id") UUID id,
+            @PathVariable("exampleId") UUID exampleId, @RequestBody ReviewDtos.ExampleRevealRequest request,
+            HttpSession session) {
+        return reviewService.revealExample(currentUser(session), id, exampleId, request, session);
+    }
+
+    @GetMapping("/cards/{id}/examples")
+    @ResponseBody
+    public ReviewDtos.ExamplePage<ReviewDtos.EditableExampleItem> libraryExamples(@PathVariable("id") UUID id,
+            @RequestParam(value = "page", defaultValue = "0") int page, HttpSession session) {
+        return reviewService.libraryExamples(currentUser(session), id, page);
+    }
+
+    @PatchMapping("/cards/{id}/examples/{exampleId}")
+    @ResponseBody
+    public ReviewDtos.ExampleUpdateResponse updateExample(@PathVariable("id") UUID id,
+            @PathVariable("exampleId") UUID exampleId, @RequestBody ReviewDtos.ExampleUpdateRequest request,
+            HttpSession session) {
+        return reviewService.updateExample(currentUser(session), id, exampleId, request);
+    }
+
+    @ExceptionHandler(ReviewPresentation.Stale.class)
+    ResponseEntity<String> stalePresentation() {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body("This review presentation has expired. Show the card again.");
+    }
+
+    @ExceptionHandler(ReviewService.MainAnswerNotRevealed.class)
+    ResponseEntity<java.util.Map<String, String>> mainAnswerNotRevealed() {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(java.util.Map.of("code", "MAIN_ANSWER_NOT_REVEALED"));
+    }
+
+    @ExceptionHandler(ReviewCardImportService.SnapshotUnavailable.class)
+    ResponseEntity<String> snapshotUnavailable() {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body("Import snapshot is unavailable. Run a fresh export.");
+    }
+
+    private ReviewDtos.ReviewQueueResponse queue(User user, HttpSession session) {
+        var queue = reviewService.nextDueCard(user, reviewedCount(session));
+        return new ReviewDtos.ReviewQueueResponse(reviewService.beginPresentation(user, queue.card(), session),
+                queue.counts());
     }
 
     @ExceptionHandler(ReviewService.InvalidCardContentException.class)
