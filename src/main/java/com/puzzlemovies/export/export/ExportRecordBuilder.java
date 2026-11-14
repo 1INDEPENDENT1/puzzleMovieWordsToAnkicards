@@ -14,7 +14,7 @@ public class ExportRecordBuilder {
                                                Map<String, List<PhraseExample>> examplesByWord) {
         List<ExportRecord> records = new ArrayList<>();
         for (DictionaryWord word : words) {
-            List<PhraseExample> examples = examplesByWord.getOrDefault(word.matchingIdentity(), List.of());
+            List<PhraseExample> examples = examplesByWord.getOrDefault(word.sourceIdentity(), List.of());
             records.add(new ExportRecord(
                     word.sourceText(),
                     buildBack(word.translations(), examples),

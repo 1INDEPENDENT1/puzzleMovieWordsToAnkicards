@@ -50,7 +50,7 @@ public class ExportController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         ExportJob job = exportJobRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        ExportJobStatus projection = projection(job, user);
+        ExportJobStatus projection = projection(job);
         model.addAttribute("job", job);
         model.addAttribute("completion", projection);
         boolean partial = projection.completeness() == ExportCompletionInfo.Completeness.PARTIAL;
@@ -68,13 +68,13 @@ public class ExportController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         ExportJob job = exportJobRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        return projection(job, user);
+        return projection(job);
     }
 
-    private ExportJobStatus projection(ExportJob job, User user) {
+    private ExportJobStatus projection(ExportJob job) {
         ExportCompletionProjection projection = ExportCompletionProjection.from(job);
         boolean reviewAvailable = projection.completion() != null
-                && exportService.generatedReviewSourceForCompletedExport(user, job.getId()).isPresent();
+                && exportService.reviewCreationAvailable(job);
         return ExportJobStatus.from(job, projection, reviewAvailable);
     }
 

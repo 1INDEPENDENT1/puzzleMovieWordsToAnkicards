@@ -2,7 +2,6 @@ package com.puzzlemovies.export.service;
 
 import com.puzzlemovies.export.config.ExportProperties;
 import com.puzzlemovies.export.export.AnkiExportFormatter;
-import com.puzzlemovies.export.export.CompleteWordExampleMatches;
 import com.puzzlemovies.export.export.DictionaryMatcher;
 import com.puzzlemovies.export.export.DictionaryParser;
 import com.puzzlemovies.export.export.DictionaryPhrase;
@@ -20,10 +19,9 @@ import com.puzzlemovies.export.model.User;
 import com.puzzlemovies.export.puzzlemovies.PuzzleMoviesDictionaryClient;
 import com.puzzlemovies.export.repo.ExportJobRepository;
 import com.puzzlemovies.export.repo.PuzzleSessionTokenRepository;
-import com.puzzlemovies.export.review.ReviewExportSource;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Qualifier;
+import java.util.concurrent.Executor;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -31,10 +29,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 @Service
 public class ExportService {
@@ -47,7 +42,8 @@ public class ExportService {
     private final ExportRecordBuilder recordBuilder;
     private final AnkiExportFormatter formatter;
     private final ExportProperties properties;
-    private final ConcurrentMap<UUID, GeneratedExportData> generatedData = new ConcurrentHashMap<>();
+    private final ExportSnapshotStore snapshots;
+    private final Executor executor;
 
     public ExportService(ExportJobRepository exportJobRepository,
                          PuzzleSessionTokenRepository tokenRepository,
@@ -57,7 +53,8 @@ public class ExportService {
                          DictionaryMatcher matcher,
                          ExportRecordBuilder recordBuilder,
                          AnkiExportFormatter formatter,
-                         ExportProperties properties) {
+                         ExportProperties properties, ExportSnapshotStore snapshots,
+                         @Qualifier("exportTaskExecutor") Executor executor) {
         this.exportJobRepository = exportJobRepository;
         this.tokenRepository = tokenRepository;
         this.dictionaryClient = dictionaryClient;
@@ -67,9 +64,10 @@ public class ExportService {
         this.recordBuilder = recordBuilder;
         this.formatter = formatter;
         this.properties = properties;
+        this.snapshots = snapshots;
+        this.executor = executor;
     }
 
-    @Transactional
     public ExportJob startExport(User user, ExportType type) {
         PuzzleSessionToken token = tokenRepository.findByUser(user)
                 .orElseThrow(() -> new IllegalStateException("No session token available"));
@@ -82,11 +80,18 @@ public class ExportService {
         job.setProgressPercent(0);
         exportJobRepository.save(job);
 
-        runExportAsync(job.getId(), type, token.getCookieHeader());
+        try {
+            executor.execute(() -> runExportAsync(job.getId(), type, token.getCookieHeader()));
+        } catch (java.util.concurrent.RejectedExecutionException ex) {
+            job.setStatus(ExportStatus.FAILED);
+            job.setErrorMessage("The export queue is full. Please try again.");
+            job.setCompletedAt(Instant.now());
+            job.setProgressPercent(100);
+            exportJobRepository.save(job);
+        }
         return job;
     }
 
-    @Async("exportTaskExecutor")
     public void runExportAsync(UUID jobId, ExportType type, String cookieHeader) {
         ExportJob job = exportJobRepository.findById(jobId)
                 .orElseThrow(() -> new IllegalStateException("Export job not found"));
@@ -125,9 +130,6 @@ public class ExportService {
             phrases = deduplicator.dedupePhrases(phrases);
 
             update(job, ExportPhase.MATCHING, 75);
-            CompleteWordExampleMatches completeMatches = type == ExportType.PHRASES
-                    ? CompleteWordExampleMatches.empty()
-                    : matcher.matchAll(words, phrases);
             Map<String, List<PhraseExample>> examplesByWord = matcher.match(words, phrases);
 
             List<ExportRecord> records = recordBuilder.buildRecords(
@@ -142,8 +144,6 @@ public class ExportService {
             var rawEntries = new java.util.ArrayList<com.puzzlemovies.export.export.RawDictionaryEntry>();
             rawEntries.addAll(parsedWords.acceptedSourceEntries());
             rawEntries.addAll(parsedPhrases.acceptedSourceEntries());
-            generatedData.put(jobId, new GeneratedExportData(records,
-                    new ReviewExportSource(words, phrases, completeMatches), rawEntries, completion));
             job.setErrorMessage(ExportCompletionMetadataCodec.encode(completion));
 
             job.setOutputFilePath(outputFile.toAbsolutePath().toString());
@@ -153,9 +153,8 @@ public class ExportService {
             job.setPhase(ExportPhase.COMPLETED);
             job.setProgressPercent(100);
             job.setCompletedAt(Instant.now());
-            exportJobRepository.save(job);
+            snapshots.complete(job, rawEntries, completion);
         } catch (Exception ex) {
-            generatedData.remove(jobId);
             if (outputFile != null) {
                 try { Files.deleteIfExists(outputFile); } catch (IOException ignored) { /* This job remains unavailable. */ }
             }
@@ -209,19 +208,6 @@ public class ExportService {
         }
     }
 
-    @Transactional(readOnly = true)
-    public Optional<List<ExportRecord>> generatedRecordsForCompletedExport(User user, UUID exportJobId) {
-        return exportJobRepository.findByIdAndUser(exportJobId, user)
-                .filter(this::usableCompletion)
-                .flatMap(job -> Optional.ofNullable(generatedData.get(job.getId())).map(GeneratedExportData::records));
-    }
-
-    @Transactional(readOnly = true)
-    public Optional<ReviewExportSource> generatedReviewSourceForCompletedExport(User user, UUID exportJobId) {
-        return exportJobRepository.findByIdAndUser(exportJobId, user)
-                .filter(this::usableCompletion)
-                .flatMap(job -> Optional.ofNullable(generatedData.get(job.getId())).map(GeneratedExportData::reviewSource));
-    }
     public ExportCompletionInfo completionInfo(ExportJob job) {
         return ExportCompletionMetadataCodec.decode(job);
     }
@@ -229,7 +215,7 @@ public class ExportService {
         return usableCompletion(job) && job.getOutputFilePath() != null && Files.isRegularFile(Path.of(job.getOutputFilePath()));
     }
     public boolean reviewCreationAvailable(ExportJob job) {
-        return usableCompletion(job) && generatedData.containsKey(job.getId());
+        return usableCompletion(job) && snapshots.find(job.getUser().getId(), job.getId()).isPresent();
     }
     public String safeErrorMessage(ExportJob job) {
         try {

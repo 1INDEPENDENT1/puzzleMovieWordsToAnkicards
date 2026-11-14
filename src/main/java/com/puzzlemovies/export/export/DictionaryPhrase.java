@@ -2,6 +2,7 @@ package com.puzzlemovies.export.export;
 
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 public record DictionaryPhrase(
@@ -11,7 +12,15 @@ public record DictionaryPhrase(
         String movieUrl,
         Set<String> matchingTokens,
         String dedupeIdentity,
-        boolean normalizationFallbackUsed) {
+        boolean normalizationFallbackUsed,
+        List<List<String>> matchingSentences,
+        List<RawDictionaryEntry> sources) {
+
+    public DictionaryPhrase(String sourceText, Set<String> translations, String movieTitle, String movieUrl,
+                            Set<String> matchingTokens, String dedupeIdentity, boolean normalizationFallbackUsed) {
+        this(sourceText, translations, movieTitle, movieUrl, matchingTokens, dedupeIdentity, normalizationFallbackUsed,
+                List.of(List.of(requireText(dedupeIdentity, "dedupeIdentity").split("\\s+"))), List.of());
+    }
 
     public DictionaryPhrase {
         sourceText = requireText(sourceText, "sourceText");
@@ -20,6 +29,8 @@ public record DictionaryPhrase(
         matchingTokens = orderedCopy(matchingTokens);
         movieTitle = blankToNull(movieTitle);
         movieUrl = blankToNull(movieUrl);
+        matchingSentences = matchingSentences.stream().map(List::copyOf).toList();
+        sources = List.copyOf(sources);
     }
 
     private static String requireText(String value, String field) {

@@ -1,6 +1,7 @@
 package com.puzzlemovies.export.export;
 
 import org.drugov.lingua.morph.Lemmatizer;
+import org.drugov.lingua.morph.LuceneLemmatizer;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -18,6 +19,30 @@ class VocabularyNormalizerTest {
 
         assertEquals("run", normalized.identity());
         assertTrue(normalized.tokens().contains("run"));
+    }
+
+    @Test
+    void usesFullMatchingFormWithOnlyOneLeadingPrefixRemoved() {
+        VocabularyNormalizer normalizer = new VocabularyNormalizer(ExportTestFixtures.testLemmatizer());
+
+        assertEquals("run up the hill", normalizer.normalizeSingle("to running up the hill").identity());
+        assertEquals("doofus", normalizer.normalizeSingle("a doofus").identity());
+        assertEquals("actor", normalizer.normalizeSingle("an actor").identity());
+        assertEquals("home", normalizer.normalizeSingle("the home").identity());
+        assertEquals("to", normalizer.normalizeSingle("to").identity());
+        assertEquals("a", normalizer.normalizeSingle("a").identity());
+        assertEquals("go go", normalizer.normalizeSingle("go go").identity());
+    }
+
+    @Test
+    void realLemmatizerKeepsNumbersContractionsAndRepeatedPositions() {
+        var normalizer = new VocabularyNormalizer(new LuceneLemmatizer());
+
+        var normalized = normalizer.normalizePhrase("Went, went 3.5 miles? I don't.");
+
+        assertEquals(List.of(List.of("go", "go", "3.5", "mile"), List.of("i", "don't")),
+                normalized.sentences());
+        assertTrue(normalized.fallbackUsed());
     }
 
     @Test

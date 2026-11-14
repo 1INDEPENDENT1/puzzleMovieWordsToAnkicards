@@ -1,6 +1,5 @@
 package com.puzzlemovies.export.model;
 
-import com.puzzlemovies.export.export.ExportRecord;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -14,7 +13,6 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.Instant;
@@ -22,15 +20,14 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "review_cards",
-        uniqueConstraints = @UniqueConstraint(name = "uk_review_cards_user_content_key",
-                columnNames = {"user_id", "content_key"}))
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_review_cards_user_entry", columnNames = {"user_id", "vocabulary_entry_id"}),
+                @UniqueConstraint(name = "uk_review_cards_user_id", columnNames = {"user_id", "id"})
+        })
 public class ReviewCard {
     @Version
     @Column(nullable = false)
     private long version;
-
-    @Column(nullable = false)
-    private boolean manualContentOverride;
 
     @Id
     private UUID id;
@@ -39,27 +36,9 @@ public class ReviewCard {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @NotBlank
-    @Column(nullable = false, length = 1000)
-    private String originalText;
-
-    @Column(length = 4000)
-    private String instanceText;
-
-    @Column(length = 8000)
-    private String translationText;
-
-    @Column(length = 2000)
-    private String sourceContext;
-
-    @NotBlank
-    @Column(name = "content_key", nullable = false, length = 128)
-    private String contentKey;
-
-    @NotNull
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 32)
-    private ExportRecord.RecordKind recordKind;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "vocabulary_entry_id", nullable = false, updatable = false)
+    private VocabularyEntry vocabularyEntry;
 
     @NotNull
     @Enumerated(EnumType.STRING)
@@ -116,19 +95,6 @@ public class ReviewCard {
         return version;
     }
 
-    public boolean isManualContentOverride() {
-        return manualContentOverride;
-    }
-
-    public void setManualContentOverride(boolean manualContentOverride) {
-        this.manualContentOverride = manualContentOverride;
-    }
-
-    public void markContentCustomized() {
-        this.manualContentOverride = true;
-        this.updatedAt = Instant.now();
-    }
-
     public void setId(UUID id) {
         this.id = id;
     }
@@ -141,52 +107,12 @@ public class ReviewCard {
         this.user = user;
     }
 
-    public String getOriginalText() {
-        return originalText;
+    public VocabularyEntry getVocabularyEntry() {
+        return vocabularyEntry;
     }
 
-    public void setOriginalText(String originalText) {
-        this.originalText = originalText;
-    }
-
-    public String getInstanceText() {
-        return instanceText;
-    }
-
-    public void setInstanceText(String instanceText) {
-        this.instanceText = instanceText;
-    }
-
-    public String getTranslationText() {
-        return translationText;
-    }
-
-    public void setTranslationText(String translationText) {
-        this.translationText = translationText;
-    }
-
-    public String getSourceContext() {
-        return sourceContext;
-    }
-
-    public void setSourceContext(String sourceContext) {
-        this.sourceContext = sourceContext;
-    }
-
-    public String getContentKey() {
-        return contentKey;
-    }
-
-    public void setContentKey(String contentKey) {
-        this.contentKey = contentKey;
-    }
-
-    public ExportRecord.RecordKind getRecordKind() {
-        return recordKind;
-    }
-
-    public void setRecordKind(ExportRecord.RecordKind recordKind) {
-        this.recordKind = recordKind;
+    public void setVocabularyEntry(VocabularyEntry vocabularyEntry) {
+        this.vocabularyEntry = vocabularyEntry;
     }
 
     public ReviewCardState getState() {

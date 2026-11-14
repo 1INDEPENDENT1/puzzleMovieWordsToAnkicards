@@ -17,7 +17,10 @@ import com.puzzlemovies.export.puzzlemovies.PuzzleMoviesDictionaryClient;
 import com.puzzlemovies.export.puzzlemovies.PuzzleMoviesSessionExpiredException;
 import com.puzzlemovies.export.repo.ExportJobRepository;
 import com.puzzlemovies.export.repo.PuzzleSessionTokenRepository;
-import com.puzzlemovies.export.review.ReviewCardDraftFactory;
+import com.puzzlemovies.export.model.VocabularyImportSnapshot;
+import com.puzzlemovies.export.repo.VocabularyImportSnapshotRepository;
+import com.puzzlemovies.export.puzzlemovies.DictionarySection;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -57,7 +60,7 @@ class ExportServiceTest {
         assertEquals(java.util.List.of(new com.puzzlemovies.export.puzzlemovies.SourceCountDiscrepancy(page.section(), 13, 3)),
                 completion.sourceCountDiscrepancies());
         assertEquals(5, c.job.getRowCount());
-        assertTrue(c.service.generatedReviewSourceForCompletedExport(c.user, c.job.getId()).isPresent());
+        assertTrue(c.service.reviewCreationAvailable(c.job));
     }
 
     @Test
@@ -76,26 +79,25 @@ class ExportServiceTest {
             c.service.runExportAsync(c.job.getId(), type, "FAKE_TEST_ONLY");
             assertEquals(ExportStatus.COMPLETED, c.job.getStatus(), type.name());
             assertEquals(ExportCompletionInfo.full(), ExportCompletionMetadataCodec.decode(c.job));
-            var records = c.service.generatedRecordsForCompletedExport(c.user, c.job.getId()).orElseThrow();
-            var source = c.service.generatedReviewSourceForCompletedExport(c.user, c.job.getId()).orElseThrow();
-            assertEquals(36, source.examples().size());
-            assertEquals(phraseExpectations.get(0).original(), source.examples().get(0).sourceText());
+            var entries = c.store.find(c.user.getId(), c.job.getId()).orElseThrow().getPayload().entries();
+            var phraseEntries = entries.stream().filter(r -> r.position().section() == DictionarySection.PHRASE).toList();
+            assertEquals(36, phraseEntries.size());
+            assertEquals(phraseExpectations.get(0).original(), phraseEntries.getFirst().sourceText());
             String output = Files.readString(Path.of(c.job.getOutputFilePath()));
-            assertEquals(records.size(), output.lines().count());
+            assertEquals(c.job.getRowCount().longValue(), output.lines().count());
             assertTrue(output.lines().allMatch(line -> line.split("\t", -1).length == 2));
             if (type == ExportType.WORDS) {
-                assertTrue(records.stream().allMatch(r -> r.recordKind() == com.puzzlemovies.export.export.ExportRecord.RecordKind.WORD));
-                assertEquals("to mince", records.get(0).front());
-                assertTrue(records.get(0).back().contains("смягчать"));
+                assertTrue(output.startsWith("to mince\t"));
+                assertTrue(output.lines().findFirst().orElseThrow().contains("смягчать"));
+                assertTrue(output.lines().noneMatch(line -> line.startsWith("Man, heck of a win!\t")));
             } else {
-                assertEquals(36, records.stream().filter(r -> r.recordKind() == com.puzzlemovies.export.export.ExportRecord.RecordKind.PHRASE).count());
-                assertTrue(records.stream().anyMatch(r -> r.front().equals("Man, heck of a win!")));
+                assertTrue(output.lines().anyMatch(line -> line.startsWith("Man, heck of a win!\t")));
             }
             if (type == ExportType.PHRASES) {
                 verify(c.dictionaryClient, never()).fetchWordPages(anyString());
-                assertTrue(source.words().isEmpty());
+                assertTrue(entries.stream().allMatch(r -> r.position().section() == DictionarySection.PHRASE));
             } else {
-                assertEquals("to mince", source.words().get(0).sourceText());
+                assertEquals("to mince", entries.getFirst().sourceText());
                 verify(c.dictionaryClient).fetchWordPages(anyString());
             }
             verify(c.dictionaryClient).fetchPhrasePages(anyString());
@@ -134,9 +136,9 @@ class ExportServiceTest {
         assertTrue(output.contains("The moon is bright."));
         assertTrue(output.lines().noneMatch(line -> line.startsWith("I am running home.\t")));
 
-        assertTrue(context.service.generatedReviewSourceForCompletedExport(context.user, context.job.getId()).isPresent());
-        assertEquals(2, context.service.generatedReviewSourceForCompletedExport(context.user, context.job.getId())
-                .orElseThrow().examples().size());
+        assertTrue(context.service.reviewCreationAvailable(context.job));
+        assertEquals(2, context.store.find(context.user.getId(), context.job.getId()).orElseThrow()
+                .getPayload().entries().stream().filter(row -> row.position().section() == DictionarySection.PHRASE).count());
     }
 
     @Test
@@ -189,12 +191,10 @@ class ExportServiceTest {
 
         context.service.runExportAsync(context.job.getId(), ExportType.COMBINED, "cookie=value");
 
-        var source = context.service.generatedReviewSourceForCompletedExport(context.user, context.job.getId()).orElseThrow();
-        var drafts = new ReviewCardDraftFactory().createDrafts(source);
+        var entries = context.store.find(context.user.getId(), context.job.getId()).orElseThrow().getPayload().entries();
         assertEquals(100, context.job.getRowCount());
-        assertEquals(50, drafts.size());
-        assertEquals(50, new java.util.HashSet<>(drafts).size());
-        assertEquals(50, source.completeMatches().examplesByWord().size());
+        assertEquals(100, entries.size());
+        assertEquals(50, entries.stream().filter(row -> row.position().section() == DictionarySection.WORD).count());
     }
 
     private TestContext context(ExportType type) {
@@ -216,6 +216,16 @@ class ExportServiceTest {
         ExportProperties properties = new ExportProperties();
         properties.setOutputDir(tempDir.toString());
 
+        var snapshots = mock(VocabularyImportSnapshotRepository.class);
+        var saved = new java.util.concurrent.atomic.AtomicReference<VocabularyImportSnapshot>();
+        when(snapshots.save(org.mockito.ArgumentMatchers.any(VocabularyImportSnapshot.class))).thenAnswer(call -> {
+            var snapshot = call.getArgument(0, VocabularyImportSnapshot.class);
+            saved.set(snapshot);
+            return snapshot;
+        });
+        when(snapshots.findByUser_IdAndExportJob_Id(user.getId(), job.getId()))
+                .thenAnswer(call -> Optional.ofNullable(saved.get()));
+        var store = new ExportSnapshotStore(exportJobRepository, snapshots, new ObjectMapper());
         ExportService service = new ExportService(
                 exportJobRepository,
                 tokenRepository,
@@ -225,15 +235,15 @@ class ExportServiceTest {
                 new DictionaryMatcher(),
                 new ExportRecordBuilder(),
                 new AnkiExportFormatter(),
-                properties);
+                properties, store, Runnable::run);
 
-        return new TestContext(service, exportJobRepository, dictionaryClient, job, user);
+        return new TestContext(service, exportJobRepository, dictionaryClient, job, user, store);
     }
 
     private record TestContext(ExportService service,
                                ExportJobRepository exportJobRepository,
                                PuzzleMoviesDictionaryClient dictionaryClient,
                                ExportJob job,
-                               User user) {
+                               User user, ExportSnapshotStore store) {
     }
 }

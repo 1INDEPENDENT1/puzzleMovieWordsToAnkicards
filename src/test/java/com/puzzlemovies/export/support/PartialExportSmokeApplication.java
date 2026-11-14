@@ -26,34 +26,6 @@ public final class PartialExportSmokeApplication {
     @TestConfiguration(proxyBeanMethods = false)
     @Profile("controlled-partial")
     public static class ControlledTransport {
-        // Only the fixture launcher submits in the background: production startup and routes are unchanged.
-        @Bean @Primary
-        com.puzzlemovies.export.service.ExportService controlledExportService(
-                com.puzzlemovies.export.repo.ExportJobRepository jobs,
-                com.puzzlemovies.export.repo.PuzzleSessionTokenRepository tokens,
-                com.puzzlemovies.export.puzzlemovies.PuzzleMoviesDictionaryClient dictionary,
-                com.puzzlemovies.export.export.DictionaryParser parser,
-                com.puzzlemovies.export.export.VocabularyDeduplicator dedupe,
-                com.puzzlemovies.export.export.DictionaryMatcher matcher,
-                com.puzzlemovies.export.export.ExportRecordBuilder builder,
-                com.puzzlemovies.export.export.AnkiExportFormatter formatter,
-                com.puzzlemovies.export.config.ExportProperties properties,
-                @org.springframework.beans.factory.annotation.Qualifier("exportTaskExecutor") java.util.concurrent.Executor executor) {
-            return new com.puzzlemovies.export.service.ExportService(jobs,tokens,dictionary,parser,dedupe,matcher,builder,formatter,properties) {
-                @Override
-                @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
-                public com.puzzlemovies.export.model.ExportJob startExport(com.puzzlemovies.export.model.User user, com.puzzlemovies.export.model.ExportType type) {
-                    var token = tokens.findByUser(user).orElseThrow();
-                    var job = new com.puzzlemovies.export.model.ExportJob();
-                    job.setUser(user); job.setType(type); job.setStatus(com.puzzlemovies.export.model.ExportStatus.PENDING);
-                    job = jobs.saveAndFlush(job);
-                    var id = job.getId();
-                    executor.execute(() -> runExportAsync(id,type,token.getCookieHeader()));
-                    return job;
-                }
-            };
-        }
-
         @Bean @Primary
         @SuppressWarnings({"unchecked", "rawtypes"})
         HttpClient controlledHttpClient(@org.springframework.beans.factory.annotation.Value("${controlled.counter-mismatch:false}") boolean counterMismatch) throws Exception {

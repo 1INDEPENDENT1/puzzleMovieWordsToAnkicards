@@ -41,24 +41,24 @@ class ReviewServiceTest {
         card.setLastReviewedAt(Instant.now().minusSeconds(800));
         var due = card.getDueAt();
         var last = card.getLastReviewedAt();
-        var key = card.getContentKey();
+        var key = card.getVocabularyEntry().getSourceKey();
         var cards = mock(ReviewCardRepository.class);
         var attempts = mock(ReviewAttemptRepository.class);
         when(cards.findByIdAndUser(card.getId(), user)).thenReturn(Optional.of(card));
-        when(cards.saveAndFlush(card)).thenAnswer(invocation -> {
-            org.springframework.test.util.ReflectionTestUtils.setField(card, "version", 5L);
-            return card;
-        });
-        var service = new ReviewService(cards, attempts, new BinaryReviewScheduler());
+        org.mockito.Mockito.doAnswer(invocation -> {
+            org.springframework.test.util.ReflectionTestUtils.setField(card.getVocabularyEntry(), "version", 5L);
+            return null;
+        }).when(cards).flush();
+        var service = service(cards, attempts);
         var updated = service.updateContent(user, card.getId(),
-                new ReviewDtos.CardContentUpdateRequest("  Walk  ", "Walk home.", "", 4L)).card();
+                new ReviewDtos.CardContentUpdateRequest("  Walk  ", "", 4L)).card();
         assertEquals("Walk", updated.originalText());
         assertEquals("", updated.translationText());
-        assertEquals("Walk home.", updated.instanceText());
+        assertEquals(null, updated.instanceText());
         assertEquals(5, updated.version());
         assertEquals("Walk", updated.lookupActions().get(0).sourceText());
-        org.junit.jupiter.api.Assertions.assertTrue(card.isManualContentOverride());
-        assertEquals(key, card.getContentKey());
+        assertEquals("Walk", card.getVocabularyEntry().getEffectiveOriginal());
+        assertEquals(key, card.getVocabularyEntry().getSourceKey());
         assertEquals(due, card.getDueAt());
         assertEquals(last, card.getLastReviewedAt());
         assertEquals(8, card.getReviewCount());
@@ -76,26 +76,24 @@ class ReviewServiceTest {
         var cards = mock(ReviewCardRepository.class);
         var attempts = mock(ReviewAttemptRepository.class);
         when(cards.findByIdAndUser(card.getId(), user)).thenReturn(Optional.of(card));
-        var service = new ReviewService(cards, attempts, new BinaryReviewScheduler());
+        var service = service(cards, attempts);
         var invalidRequests = List.of(
-                new ReviewDtos.CardContentUpdateRequest(" \n ", "", "", 4L),
-                new ReviewDtos.CardContentUpdateRequest(null, "", "", 4L),
-                new ReviewDtos.CardContentUpdateRequest("a".repeat(1001), "", "", 4L),
-                new ReviewDtos.CardContentUpdateRequest("valid", "a".repeat(4001), "", 4L),
-                new ReviewDtos.CardContentUpdateRequest("valid", "", "a".repeat(8001), 4L),
-                new ReviewDtos.CardContentUpdateRequest("valid", null, null, null),
-                new ReviewDtos.CardContentUpdateRequest("valid", null, null, -1L));
+                new ReviewDtos.CardContentUpdateRequest(" \n ", "", 4L),
+                new ReviewDtos.CardContentUpdateRequest(null, "", 4L),
+                new ReviewDtos.CardContentUpdateRequest("a".repeat(1001), "", 4L),
+                new ReviewDtos.CardContentUpdateRequest("valid", "a".repeat(8001), 4L),
+                new ReviewDtos.CardContentUpdateRequest("valid", null, null),
+                new ReviewDtos.CardContentUpdateRequest("valid", null, -1L));
         for (var request : invalidRequests) {
             assertThrows(ReviewService.InvalidCardContentException.class,
                     () -> service.updateContent(user, card.getId(), request));
         }
         assertThrows(ReviewService.StaleCardException.class, () -> service.updateContent(user, card.getId(),
-                new ReviewDtos.CardContentUpdateRequest("Walk", null, null, 3L)));
+                new ReviewDtos.CardContentUpdateRequest("Walk", null, 3L)));
         assertThrows(ReviewService.CardNotFoundException.class, () -> service.updateContent(user, java.util.UUID.randomUUID(),
-                new ReviewDtos.CardContentUpdateRequest("Walk", null, null, 4L)));
-        assertEquals("Run", card.getOriginalText());
-        assertFalse(card.isManualContentOverride());
-        org.mockito.Mockito.verify(cards, org.mockito.Mockito.never()).saveAndFlush(any());
+                new ReviewDtos.CardContentUpdateRequest("Walk", null, 4L)));
+        assertEquals("Run", card.getVocabularyEntry().getEffectiveOriginal());
+        org.mockito.Mockito.verify(cards, org.mockito.Mockito.never()).flush();
         org.mockito.Mockito.verifyNoInteractions(attempts);
     }
 
@@ -105,10 +103,10 @@ class ReviewServiceTest {
         var card = ReviewTestFixtures.versionedCard(user, "Run", 0);
         var cards = mock(ReviewCardRepository.class);
         when(cards.findByIdAndUser(card.getId(), user)).thenReturn(Optional.of(card));
-        when(cards.saveAndFlush(card)).thenThrow(new org.springframework.orm.ObjectOptimisticLockingFailureException(ReviewCard.class, card.getId()));
-        var service = new ReviewService(cards, mock(ReviewAttemptRepository.class), new BinaryReviewScheduler());
-        assertThrows(ReviewService.StaleCardException.class, () -> service.updateContent(user, card.getId(),
-                new ReviewDtos.CardContentUpdateRequest("Walk", null, null, 0L)));
+        org.mockito.Mockito.doThrow(new org.springframework.orm.ObjectOptimisticLockingFailureException(ReviewCard.class, card.getId())).when(cards).flush();
+        var service = service(cards, mock(ReviewAttemptRepository.class));
+        assertThrows(org.springframework.dao.OptimisticLockingFailureException.class, () -> service.updateContent(user, card.getId(),
+                new ReviewDtos.CardContentUpdateRequest("Walk", null, 0L)));
     }
 
     @Test
@@ -123,7 +121,7 @@ class ReviewServiceTest {
         when(cards.findLibrary(eq(user), any(Pageable.class)))
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(mixed, empty)));
         var attempts = mock(ReviewAttemptRepository.class);
-        var page = new ReviewService(cards, attempts, new BinaryReviewScheduler()).cardLibrary(user, 2);
+        var page = service(cards, attempts).cardLibrary(user, 2);
         assertEquals(3, page.getContent().get(0).totalAnswers());
         assertEquals(2, page.getContent().get(0).correctAnswers());
         assertEquals(1, page.getContent().get(0).incorrectAnswers());
@@ -137,19 +135,18 @@ class ReviewServiceTest {
     void loadsDueQueueAndBuildsLookupActionsWithoutPersistedUrls() {
         User user = ReviewTestFixtures.user("learner@example.com");
         ReviewCard card = ReviewTestFixtures.dueCard(user, "Run");
-        card.setInstanceText("I am running home.");
         ReviewCardRepository cards = mock(ReviewCardRepository.class);
         when(cards.findDueCards(eq(user), any(Instant.class), any(Pageable.class))).thenReturn(List.of(card));
         when(cards.countDueCards(eq(user), any(Instant.class))).thenReturn(1L);
         when(cards.findNextDueAt(eq(user), any(Instant.class))).thenReturn(Optional.empty());
-        ReviewService service = new ReviewService(cards, mock(ReviewAttemptRepository.class), new BinaryReviewScheduler());
+        ReviewService service = service(cards, mock(ReviewAttemptRepository.class));
 
         ReviewDtos.ReviewQueueResponse queue = service.nextDueCard(user, 2);
 
         assertEquals("Run", queue.card().originalText());
         assertEquals(2, queue.counts().reviewedCount());
         assertEquals(1, queue.counts().remainingDueCount());
-        assertEquals(3, queue.card().lookupActions().size());
+        assertEquals(2, queue.card().lookupActions().size());
         assertFalse(queue.card().lookupActions().get(0).url().isBlank());
     }
 
@@ -161,7 +158,7 @@ class ReviewServiceTest {
         when(cards.findDueCards(eq(user), any(Instant.class), any(Pageable.class))).thenReturn(List.of());
         when(cards.countDueCards(eq(user), any(Instant.class))).thenReturn(0L);
         when(cards.findNextDueAt(eq(user), any(Instant.class))).thenReturn(Optional.of(next));
-        ReviewService service = new ReviewService(cards, mock(ReviewAttemptRepository.class), new BinaryReviewScheduler());
+        ReviewService service = service(cards, mock(ReviewAttemptRepository.class));
 
         ReviewDtos.ReviewQueueResponse queue = service.nextDueCard(user, 0);
 
@@ -179,7 +176,7 @@ class ReviewServiceTest {
         when(cards.findDueCards(eq(user), any(Instant.class), any(Pageable.class))).thenReturn(List.of());
         when(cards.countDueCards(eq(user), any(Instant.class))).thenReturn(0L);
         when(cards.findNextDueAt(eq(user), any(Instant.class))).thenReturn(Optional.empty());
-        ReviewService service = new ReviewService(cards, attempts, new BinaryReviewScheduler());
+        ReviewService service = service(cards, attempts);
 
         ReviewDtos.ReviewAnswerResponse response = service.answerCard(user, card.getId(), ReviewAnswer.KNOWN, 1200L, 0);
 
@@ -201,11 +198,15 @@ class ReviewServiceTest {
         future.setDueAt(Instant.now().plusSeconds(3600));
         ReviewCardRepository cards = mock(ReviewCardRepository.class);
         when(cards.findByIdAndUser(future.getId(), user)).thenReturn(Optional.of(future));
-        ReviewService service = new ReviewService(cards, mock(ReviewAttemptRepository.class), new BinaryReviewScheduler());
+        ReviewService service = service(cards, mock(ReviewAttemptRepository.class));
 
         assertThrows(ReviewService.CardNotAnswerableException.class,
                 () -> service.answerCard(user, future.getId(), ReviewAnswer.KNOWN, null, 0));
         assertThrows(ReviewService.CardNotFoundException.class,
                 () -> service.answerCard(user, java.util.UUID.randomUUID(), ReviewAnswer.KNOWN, null, 0));
+    }
+    private ReviewService service(ReviewCardRepository cards, ReviewAttemptRepository attempts) {
+        return new ReviewService(cards, attempts, new BinaryReviewScheduler(),
+                mock(com.puzzlemovies.export.repo.WordExampleLinkRepository.class), mock(LinkedVocabularyService.class));
     }
 }

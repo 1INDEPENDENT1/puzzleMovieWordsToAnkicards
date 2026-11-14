@@ -28,7 +28,10 @@
     <article class="review-card"
              id="review-card"
              th:classappend="${card == null} ? ' is-empty'"
-             th:attr="data-card-id=${card != null ? card.id() : ''},data-version=${card != null ? card.version() : ''},data-original=${card != null ? card.originalText() : ''},data-instance=${card != null ? card.instanceText() : ''},data-translation=${card != null ? card.translationText() : ''}">
+             th:attr="data-card-id=${card != null ? card.id() : ''},data-version=${card != null ? card.version() : ''},
+                      data-original=${card != null ? card.originalText() : ''},data-translation=${card != null ? card.translationText() : ''},
+                      data-presentation-id=${card != null ? card.presentationId() : ''},
+                      data-content-version=${card != null ? card.effectiveContentVersion() : ''}">
         <div class="empty-state" id="empty-state" th:if="${card == null}">
             <h2>No cards due</h2>
             <p class="muted">Create cards from a completed export or come back when the next review is due.</p>
@@ -39,20 +42,16 @@
                 <span class="eyebrow" th:text="${card.state()}">NEW</span>
                 <button type="button" class="button-secondary edit-current" data-edit-current>Edit card</button>
                 <h2 id="card-original" th:text="${card.originalText()}">word</h2>
-                <p class="instance" id="card-instance"
-                   th:if="${card.instanceText()}"
-                   th:text="${card.instanceText()}"></p>
+                <button type="button" class="button-secondary open-examples" data-open-examples
+                        aria-haspopup="dialog" th:text="${'Examples (' + card.exampleCount() + ')'}">Examples (0)</button>
             </div>
 
             <div class="card-face card-back" id="card-back" hidden>
                 <h3>Answer</h3>
-                <p class="translation preserved-text" id="card-translation"
-                   th:text="${card.translationText() != null && !card.translationText().isBlank() ? card.translationText() : 'No translation saved'}"></p>
-                <p class="source" id="card-source"
-                   th:if="${card.sourceContext()}"
-                   th:text="${card.sourceContext()}"></p>
+                <p class="translation preserved-text" id="card-translation"></p>
                 <div class="lookup-actions" id="lookup-actions">
                     <a th:each="action : ${card.lookupActions()}"
+                       th:if="${action.type().name() == 'DICTIONARY' || action.type().name() == 'PRONUNCIATION'}"
                        th:href="${action.url()}"
                        th:text="${action.label()}"
                        target="_blank"
@@ -62,13 +61,34 @@
         </div>
     </article>
 
-    <div class="answer-controls" id="answer-controls" th:if="${card != null}">
+    <div class="answer-controls" id="answer-controls" th:hidden="${card == null}">
         <button type="button" id="reveal-button">Reveal</button>
         <button type="button" class="answer-button unknown" data-answer="UNKNOWN" disabled>I don't know</button>
         <button type="button" class="answer-button known" data-answer="KNOWN" disabled>I know</button>
     </div>
 
     <div class="review-status" id="review-status" aria-live="polite"></div>
+    <button type="button" id="refresh-review" class="button-secondary" hidden>Show card again</button>
+
+    <dialog id="review-examples" class="card-editor examples-dialog" aria-labelledby="review-examples-title">
+        <h2 id="review-examples-title">Card examples</h2>
+        <p id="example-position" aria-live="polite"></p>
+        <p id="example-original" class="instance preserved-text"></p>
+        <p id="example-movie" class="source"></p>
+        <p id="example-translation" class="translation preserved-text" aria-live="polite" hidden></p>
+        <p id="example-gate" class="muted">Reveal the card answer first to unlock example translations.</p>
+        <p id="example-status" role="status" aria-live="polite"></p>
+        <div class="page-actions">
+            <button type="button" id="example-previous" class="button-secondary" disabled>Previous</button>
+            <button type="button" id="example-next" class="button-secondary" disabled>Next</button>
+            <button type="button" id="example-retry" class="button-secondary" hidden>Try again</button>
+        </div>
+        <div class="page-actions example-actions">
+            <button type="button" id="example-reveal" aria-describedby="example-gate" disabled>Translation</button>
+            <a id="example-lookup" target="_blank" rel="noopener noreferrer" hidden>Translate sentence</a>
+            <button type="button" id="example-close" class="button-secondary" autofocus>Close</button>
+        </div>
+    </dialog>
 
     <dialog id="review-editor" class="card-editor" aria-labelledby="review-editor-title">
         <form id="review-edit-form" class="form">
@@ -76,7 +96,6 @@
             <input type="hidden" name="version">
             <label>Original text <textarea name="originalText" required maxlength="1000" rows="2"></textarea></label>
             <label>Translation <textarea name="translationText" maxlength="8000" rows="3"></textarea></label>
-            <label>Example <textarea name="instanceText" maxlength="4000" rows="3"></textarea></label>
             <p id="review-edit-feedback" class="edit-feedback" role="alert"></p>
             <div class="page-actions">
                 <button type="submit">Save changes</button>

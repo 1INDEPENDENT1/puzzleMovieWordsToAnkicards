@@ -14,6 +14,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 @Component
 public class DictionaryParser {
@@ -64,14 +65,15 @@ public class DictionaryParser {
     public DictionaryParseResult<DictionaryWord> parseWordPages(List<DictionaryPage> pages) {
         return parsePages(pages, DictionarySection.WORD, normalizer::normalizeSingle,
                 value -> new DictionaryWord(value.entry().sourceText(), new LinkedHashSet<>(value.entry().translations()),
-                        value.normalized().identity(), value.normalized().fallbackUsed()));
+                        value.normalized().identity(), value.normalized().fallbackUsed(), List.of(value.entry())));
     }
 
     public DictionaryParseResult<DictionaryPhrase> parsePhrasePages(List<DictionaryPage> pages) {
         return parsePages(pages, DictionarySection.PHRASE, normalizer::normalizePhrase,
                 value -> new DictionaryPhrase(value.entry().sourceText(), new LinkedHashSet<>(value.entry().translations()),
                         value.entry().movieTitle(), value.entry().movieUrl(), value.normalized().tokens(),
-                        value.normalized().identity(), value.normalized().fallbackUsed()));
+                        value.normalized().identity(), value.normalized().fallbackUsed(), value.normalized().sentences(),
+                        List.of(value.entry())));
     }
 
     private <T> DictionaryParseResult<T> parsePages(List<DictionaryPage> pages, DictionarySection section,
@@ -103,25 +105,70 @@ public class DictionaryParser {
 
     private List<SourceExample> inlineExamples(Element cell, SourceMetadata metadata) {
         if (cell == null) return List.of();
-        Element english = cell.selectFirst(".dict__video__list-table__phrase__eng");
-        String original;
-        if (english != null) {
-            original = sourceText(english);
-        } else {
-            // The observed WORD specimen has an empty cell; the derived nonempty boundary is plain text.
-            Element content = cell.clone();
-            content.select(".dict__video__list-table__phrase__rus, .puzzle-card__phrase-source, a.dict__video__list-table__info__balloon__title").remove();
-            original = sourceText(content);
+        String originalSelector = ".dict__video__list-table__phrase__eng";
+        String translationSelector = ".dict__video__list-table__phrase__rus";
+        var originals = cell.select(originalSelector);
+        if (!originals.isEmpty()) {
+            List<Element> scopes = originals.stream().map(original -> inlineScope(original, cell, originalSelector)).toList();
+            SourceMetadata shared = originals.size() == 1 ? metadata : sourceMetadata(cell,
+                    field -> scopes.stream().noneMatch(scope -> scope == field || field.parents().contains(scope)));
+            List<SourceExample> examples = new ArrayList<>();
+            for (int index = 0; index < originals.size(); index++) {
+                Element original = originals.get(index);
+                Element scope = scopes.get(index);
+                SourceMetadata local = sourceMetadata(scope);
+                String sourceId = null;
+                for (Element ancestor = original; ancestor != scope.parent() && sourceId == null; ancestor = ancestor.parent()) {
+                    sourceId = optionalAttribute(ancestor, "data-id");
+                }
+                String text = sourceText(original);
+                if (!text.isBlank()) {
+                    examples.add(new SourceExample(text, inlineTranslations(cell, scope, originalSelector, translationSelector),
+                            local.label() == null ? shared.label() : local.label(),
+                            local.title() == null ? shared.title() : local.title(),
+                            local.title() == null ? shared.url() : local.url(), sourceId));
+                }
+            }
+            return List.copyOf(examples);
         }
+
+        // The inline cell can also contain a plain-text context.
+        Element content = cell.clone();
+        content.select(translationSelector + ", .puzzle-card__phrase-source, a.dict__video__list-table__info__balloon__title").remove();
+        String original = sourceText(content);
         return original.isBlank() ? List.of() : List.of(new SourceExample(original,
-                sourceTranslations(cell, ".dict__video__list-table__phrase__rus"),
-                metadata.label(), metadata.title(), metadata.url()));
+                sourceTranslations(cell, translationSelector),
+                metadata.label(), metadata.title(), metadata.url(), optionalAttribute(cell, "data-id")));
+    }
+
+    private Element inlineScope(Element original, Element cell, String selector) {
+        Element scope = original;
+        while (scope != cell && scope.parent().select(selector).size() == 1) {
+            scope = scope.parent();
+        }
+        return scope;
+    }
+
+    private List<String> inlineTranslations(Element cell, Element scope, String originalSelector, String translationSelector) {
+        List<String> translations = new ArrayList<>(sourceTranslations(scope, translationSelector));
+        if (scope != cell) {
+            for (Element sibling = scope.nextElementSibling();
+                 sibling != null && sibling.selectFirst(originalSelector) == null;
+                 sibling = sibling.nextElementSibling()) {
+                translations.addAll(sourceTranslations(sibling, translationSelector));
+            }
+        }
+        return List.copyOf(translations);
     }
 
     private SourceMetadata sourceMetadata(Element cell) {
+        return sourceMetadata(cell, field -> true);
+    }
+
+    private SourceMetadata sourceMetadata(Element cell, Predicate<Element> include) {
         if (cell == null) return new SourceMetadata(null, null, null);
-        Element label = cell.selectFirst(".puzzle-card__phrase-source");
-        Element link = cell.selectFirst("a.dict__video__list-table__info__balloon__title");
+        Element label = cell.select(".puzzle-card__phrase-source").stream().filter(include).findFirst().orElse(null);
+        Element link = cell.select("a.dict__video__list-table__info__balloon__title").stream().filter(include).findFirst().orElse(null);
         String href = link == null ? null : optionalAttribute(link, "href");
         return new SourceMetadata(optionalText(label), optionalText(link),
                 href == null ? null : link.absUrl("href"));

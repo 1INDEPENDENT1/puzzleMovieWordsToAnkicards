@@ -1,19 +1,15 @@
 package com.puzzlemovies.export.review;
 
-import com.puzzlemovies.export.export.ExportRecord;
-import com.puzzlemovies.export.export.CompleteWordExampleMatches;
-import com.puzzlemovies.export.export.DictionaryPhrase;
-import com.puzzlemovies.export.export.DictionaryWord;
 import com.puzzlemovies.export.model.ReviewAnswer;
 import com.puzzlemovies.export.model.ReviewAttempt;
 import com.puzzlemovies.export.model.ReviewCard;
 import com.puzzlemovies.export.model.ReviewCardState;
 import com.puzzlemovies.export.model.User;
+import com.puzzlemovies.export.model.VocabularyEntry;
 
 import java.time.Instant;
 import java.util.UUID;
 import java.util.List;
-import java.util.Map;
 
 public final class ReviewTestFixtures {
     private ReviewTestFixtures() {
@@ -30,10 +26,8 @@ public final class ReviewTestFixtures {
         ReviewCard card = new ReviewCard();
         card.setId(UUID.randomUUID());
         card.setUser(user);
-        card.setOriginalText(originalText);
-        card.setTranslationText("translation");
-        card.setContentKey(UUID.randomUUID().toString());
-        card.setRecordKind(ExportRecord.RecordKind.WORD);
+        card.setVocabularyEntry(new VocabularyEntry(user, UUID.randomUUID().toString(),
+                originalText, originalText, List.of("translation")));
         card.setState(ReviewCardState.NEW);
         card.setDueAt(Instant.now().minusSeconds(60));
         card.setEaseFactor(2.5);
@@ -59,6 +53,7 @@ public final class ReviewTestFixtures {
     public static ReviewCard versionedCard(User user, String originalText, long version) {
         ReviewCard card = dueCard(user, originalText);
         org.springframework.test.util.ReflectionTestUtils.setField(card, "version", version);
+        org.springframework.test.util.ReflectionTestUtils.setField(card.getVocabularyEntry(), "version", version);
         return card;
     }
 
@@ -72,20 +67,4 @@ public final class ReviewTestFixtures {
         return java.util.Arrays.stream(answers).map(answer -> attempt(user, card, answer)).toList();
     }
 
-    public static ExportRecord wordRecordWithExample() {
-        return new ExportRecord(
-                "Run",
-                "бежать<br><div class=\"example\">I am running home.<br><span class=\"translation\">Я бегу домой.</span><br><span class=\"movie\">Arrival</span></div>",
-                ExportRecord.RecordKind.WORD);
-    }
-
-    public static ExportRecord phraseRecord() {
-        return new ExportRecord("The moon is bright.", "Луна яркая.", ExportRecord.RecordKind.PHRASE);
-    }
-
-    public static ReviewExportSource source(List<DictionaryWord> words,
-                                            List<DictionaryPhrase> examples,
-                                            Map<String, List<com.puzzlemovies.export.export.PhraseExample>> matches) {
-        return new ReviewExportSource(words, examples, new CompleteWordExampleMatches(matches));
-    }
 }
